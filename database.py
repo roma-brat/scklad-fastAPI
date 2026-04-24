@@ -556,8 +556,11 @@ class DatabaseManager:
                 return False
 
             old_value = user.screen_permissions
+            logger.info(f"[DB] update_user_screen_permissions_dict: user_id={user_id}, data={data}, old_value={old_value}")
             user.screen_permissions = json.dumps(data)
             user.updated_at = datetime.utcnow()
+            session.commit()
+            logger.info(f"[DB] Saved: user.screen_permissions={user.screen_permissions}")
 
             self.log_audit(
                 action="update_user_screen_permissions_dict",

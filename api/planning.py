@@ -530,7 +530,11 @@ async def planning_settings(request: Request):
     if user_id and hasattr(db, "get_user_screen_permissions"):
         screens = db.get_user_screen_permissions(user_id)
         if screens is not None:
-            has_access = "planning_settings" in screens
+            # Поддержка двух форматов: простой список [] или словарь {screens: [...], route_view_mode: "..."}
+            if isinstance(screens, dict):
+                has_access = "planning_settings" in screens.get("screens", [])
+            else:
+                has_access = "planning_settings" in screens
         else:
             # Если permissions не настроены — fallback на роль
             user_role = (

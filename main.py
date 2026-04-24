@@ -56,6 +56,15 @@ class MobileDetectionMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(MobileDetectionMiddleware)
 
+# Flutter service worker - PWA endpoint
+@app.get("/flutter_service_worker.js")
+async def flutter_service_worker():
+    from fastapi.responses import FileResponse
+    sw_path = "static/flutter_service_worker.js"
+    if os.path.exists(sw_path):
+        return FileResponse(sw_path, media_type="application/javascript")
+    return JSONResponse({"error": "Not Found"}, status_code=404)
+
 # Static
 app.mount("/static", StaticFiles(directory="static"), name="static")
 item_images = os.path.join(os.path.dirname(__file__), "item_images")
@@ -136,8 +145,11 @@ async def login_submit(
     if session:
         # Загружаем screen_permissions из БД
         screen_perms = None
+        route_view_mode = "approved_only"
         if hasattr(db_manager, "get_user_screen_permissions"):
             screen_perms = db_manager.get_user_screen_permissions(session.user.id)
+        if hasattr(db_manager, "get_user_route_view_mode"):
+            route_view_mode = db_manager.get_user_route_view_mode(session.user.id)
 
         request.session["user"] = {
             "id": session.user.id,
@@ -147,6 +159,7 @@ async def login_submit(
             "workstation": session.user.workstation,
             "workstations": session.user.workstations,
             "screen_permissions": screen_perms,
+            "route_view_mode": route_view_mode,
         }
         return RedirectResponse(url="/dashboard", status_code=303)
 
@@ -277,7 +290,7 @@ async def health_check():
 
 
 # ========== IMPORT ALL API ROUTES ==========
-from api import items, transactions, users, details, routes
+from api import items, transactions, users, details, routes, materials
 from api import (
     planning,
     equipment,
@@ -304,6 +317,7 @@ app.include_router(mobile_api.router)
 app.include_router(planner.router)
 app.include_router(otk.router)
 app.include_router(order_card.router)
+app.include_router(materials.router)
 
 
 if __name__ == "__main__":

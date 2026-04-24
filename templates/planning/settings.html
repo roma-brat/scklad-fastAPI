@@ -16,6 +16,16 @@
 {% endblock %}
 
 {% block content %}
+{# ===================== ОПРЕДЕЛЕНИЕ ВИДИМОСТИ ЭКРАНОВ ===================== #}
+{# Admin имеет полный доступ если нет explicit permissions #}
+{% set user_screens = [] %}
+{% if current_user.screen_permissions is not none and current_user.screen_permissions is mapping %}
+    {% set user_screens = current_user.screen_permissions.screens | default([]) %}
+{% elif current_user.screen_permissions is not none and current_user.screen_permissions is iterable and current_user.screen_permissions is not string %}
+    {% set user_screens = current_user.screen_permissions %}
+{% endif %}
+{% set has_full_access = current_user.role == 'admin' and not user_screens %}
+
 <div class="bg-white dark:bg-dark-800 border-b border-gray-200 dark:border-dark-700 px-6 py-4">
     <div class="flex items-center justify-between">
         <div>
@@ -25,17 +35,17 @@
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Управление оборудованием и рабочими днями</p>
         </div>
         <div class="flex space-x-2">
-            {% if current_user.role == 'admin' or current_user.screen_permissions is none or 'planning' in current_user.screen_permissions %}
+            {% if has_full_access or 'planning' in user_screens %}
             <a href="/planning/plan" class="px-4 py-2 bg-gray-200 dark:bg-dark-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-dark-600 transition text-sm">
                 <i class="fas fa-tasks mr-2"></i>План
             </a>
             {% endif %}
-            {% if current_user.role == 'admin' or current_user.screen_permissions is none or 'planning_calendar' in current_user.screen_permissions %}
+            {% if has_full_access or 'planning_calendar' in user_screens %}
             <a href="/planning/calendar" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
                 <i class="fas fa-calendar-alt mr-2"></i>Календарь
             </a>
             {% endif %}
-            {% if current_user.role == 'admin' or current_user.screen_permissions is none or 'planning_gantt' in current_user.screen_permissions %}
+            {% if has_full_access or 'planning_gantt' in user_screens %}
             <a href="/planning/gantt" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">
                 <i class="fas fa-chart-bar mr-2"></i>Ганта
             </a>

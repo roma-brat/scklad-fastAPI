@@ -33,6 +33,17 @@ async def routes_list(
         return RedirectResponse(url="/login", status_code=303)
 
     db = get_db()
+
+    # Проверяем route_view_mode пользователя
+    # Если в БД установлен режим 'approved_only' — показываем только утверждённые по умолчанию
+    user_id = user.get("id")
+    route_view_mode = "all"  # По умолчанию показываем все
+    if user_id and hasattr(db, "get_user_route_view_mode"):
+        saved_mode = db.get_user_route_view_mode(user_id)
+        if saved_mode == "approved_only":
+            route_view_mode = "approved_only"
+            approved_only = True  # Автоматически фильтруем
+
     try:
         routes = db.get_all_routes()
     except Exception:
@@ -84,6 +95,7 @@ async def routes_list(
             "highlight_detail_id": highlight_detail_id,
             "can_approve": can_approve,
             "is_admin": is_admin,
+            "route_view_mode": route_view_mode,
         },
     )
 

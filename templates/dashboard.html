@@ -4,10 +4,37 @@
 
 {% block content %}
 {# ===================== ОПРЕДЕЛЕНИЕ ВИДИМОСТИ ЭКРАНОВ ===================== #}
-{# Получаем список экранов из permissions #}
+{# Получаем список экранов из permissions или из role defaults #}
 {% set user_screens = [] %}
-{% if current_user.screen_permissions is not none and current_user.screen_permissions is mapping %}
+{% set route_view_mode = 'approved_only' %}
+
+{# Определяем user_screens в зависимости от формата screen_permissions #}
+{% if current_user.screen_permissions is none %}
+    {# Нет permissions в БД — используем role defaults #}
+    {% if current_user.role == 'technologist_designer' %}
+        {% set user_screens = ['dashboard', 'details', 'routes', 'materials', 'equipment', 'transactions', 'workshop_inventory'] %}
+    {% elif current_user.role == 'technologist' %}
+        {% set user_screens = ['dashboard', 'inventory', 'details', 'routes', 'materials', 'transactions'] %}
+    {% elif current_user.role == 'master' %}
+        {% set user_screens = ['dashboard', 'inventory', 'details', 'routes', 'materials', 'equipment', 'transactions', 'workshop_inventory'] %}
+    {% elif current_user.role == 'foreman' %}
+        {% set user_screens = ['dashboard', 'inventory', 'details', 'routes', 'materials', 'equipment', 'reports', 'transactions', 'workshop_inventory', 'planning', 'planning_calendar', 'planning_gantt'] %}
+    {% elif current_user.role == 'chief_designer' %}
+        {% set user_screens = ['dashboard', 'details', 'routes', 'materials', 'reports', 'planning_settings', 'transactions'] %}
+    {% elif current_user.role == 'chief_engineer' %}
+        {% set user_screens = ['dashboard', 'inventory', 'details', 'routes', 'materials', 'equipment', 'reports', 'transactions', 'workshop_inventory', 'planning', 'planning_calendar', 'planning_gantt'] %}
+    {% elif current_user.role == 'storekeeper' %}
+        {% set user_screens = ['dashboard', 'inventory', 'transactions', 'import_export', 'workshop_inventory'] %}
+    {% elif current_user.role == 'user' %}
+        {% set user_screens = ['dashboard', 'inventory', 'transactions', 'my_page'] %}
+    {% endif %}
+{% elif current_user.screen_permissions is mapping %}
+    {# Словарь {screens: [...], route_view_mode: "..."} #}
     {% set user_screens = current_user.screen_permissions.screens | default([]) %}
+    {% set route_view_mode = current_user.screen_permissions.route_view_mode | default('approved_only') %}
+{% elif current_user.screen_permissions is iterable and current_user.screen_permissions is not string %}
+    {# Простой список [...] #}
+    {% set user_screens = current_user.screen_permissions %}
 {% endif %}
 
 {# Admin имеет полный доступ если нет explicit permissions #}
@@ -30,23 +57,23 @@
 {% set can_equipment = has_full_access or 'equipment' in user_screens %}
 {% set can_my_page = has_full_access or 'my_page' in user_screens %}
 
-{# Fallback для ролей без explicit permissions (кроме admin) #}
-{% if not user_screens and current_user.role != 'admin' %}
-    {% set can_inventory = true %}
-    {% set can_transactions = current_user.role in ['admin', 'chief_designer', 'chief_engineer', 'technologist_designer', 'master', 'foreman', 'storekeeper', 'technologist'] %}
-    {% set can_details = current_user.role in ['admin', 'chief_designer', 'chief_engineer', 'technologist_designer', 'technologist', 'master', 'foreman'] %}
-    {% set can_routes = current_user.role in ['admin', 'chief_designer', 'chief_engineer', 'technologist_designer', 'technologist', 'master', 'foreman'] %}
-    {% set can_materials = true %}
-    {% set can_planning = true %}
-    {% set can_calendar = true %}
-    {% set can_gantt = true %}
-    {% set can_settings = current_user.role == 'admin' %}
-    {% set can_reports = current_user.role in ['admin', 'chief_engineer', 'chief_designer', 'foreman'] %}
-    {% set can_users = current_user.role == 'admin' %}
-    {% set can_import_export = current_user.role in ['admin', 'storekeeper'] %}
-    {% set can_workshop = current_user.role in ['admin', 'storekeeper', 'master', 'foreman', 'technologist_designer', 'chief_engineer'] %}
-    {% set can_equipment = current_user.role in ['admin', 'chief_engineer', 'technologist_designer', 'master', 'foreman'] %}
-{% set can_my_page = true %}
+{# Дефолтный route_view_mode для ролей #}
+{% set ROLE_ROUTE_VIEW_MODE = {
+    'user': 'approved_only',
+    'otk': 'all',
+    'storekeeper': 'approved_only',
+    'technologist': 'approved_only',
+    'technologist_designer': 'approved_only',
+    'master': 'approved_only',
+    'foreman': 'approved_only',
+    'chief_designer': 'approved_only',
+    'chief_engineer': 'approved_only',
+    'admin': 'all'
+} %}
+
+{# Если route_view_mode всё ещё не установлен — берём из дефолтов роли #}
+{% if route_view_mode is not defined or route_view_mode is none %}
+    {% set route_view_mode = ROLE_ROUTE_VIEW_MODE.get(current_user.role, 'approved_only') %}
 {% endif %}
 
 {# === ИСПОЛЬЗОВАНИЕ ПЕРЕМЕННЫХ (show_*) === #}

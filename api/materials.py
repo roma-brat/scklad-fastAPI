@@ -10,19 +10,19 @@ import logging
 # Lazy imports для избежания циклической зависимости
 def _get_db():
     import main
-    return main._get_db()
+    return main.get_db()
 
 def _get_user(request):
     import main
-    return main._get_user(request)
+    return main.get_user(request)
 
 def _require_login(request):
     import main
-    return main._require_login(request)
+    return main.require_login(request)
 
 def _is_mobile(request):
     import main
-    return main._is_mobile(request)
+    return main.is_mobile(request)
 
 
 logger = logging.getLogger(__name__)

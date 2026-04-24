@@ -27,6 +27,72 @@ ROLE_OPTIONS = [
     ("otk", "ОТК"),
 ]
 
+# Полный список всех страниц системы с группировкой
+ALL_SCREENS = [
+    # Основные
+    {"id": "dashboard", "title": "Главная", "group": "main"},
+
+    # Склад
+    {"id": "inventory", "title": "Склад инструментов", "group": "sklad"},
+    {"id": "workshop_inventory", "title": "Инструменты на станках", "group": "sklad"},
+    {"id": "transactions", "title": "История операций", "group": "sklad"},
+
+    # Производство
+    {"id": "details", "title": "Детали (ДСЕ)", "group": "production"},
+    {"id": "routes", "title": "Маршруты", "group": "production"},
+
+    # Планирование
+    {"id": "planning", "title": "План заказов", "group": "planning"},
+    {"id": "planning_calendar", "title": "Календарь", "group": "planning"},
+    {"id": "planning_gantt", "title": "Ганта", "group": "planning"},
+    {"id": "planning_settings", "title": "Настройки плана", "group": "planning"},
+
+    # Материалы и оборудование
+    {"id": "materials", "title": "Материалы", "group": "materials"},
+    {"id": "equipment", "title": "Оборудование", "group": "materials"},
+
+    # Администрирование
+    {"id": "reports", "title": "Отчёты", "group": "admin"},
+    {"id": "import_export", "title": "Импорт/Экспорт", "group": "admin"},
+    {"id": "users", "title": "Пользователи", "group": "admin"},
+]
+
+# Группировка экранов (только для отображения в UI)
+SCREEN_GROUPS = {
+    "main": {"title": "Основные", "icons": "fa-home"},
+    "sklad": {"title": "Склад", "icons": "fa-boxes"},
+    "production": {"title": "Производство", "icons": "fa-cogs"},
+    "planning": {"title": "Планирование", "icons": "fa-calendar-alt"},
+    "materials": {"title": "Материалы и оборудование", "icons": "fa-layer-group"},
+    "admin": {"title": "Администрирование", "icons": "fa-chart-bar"},
+}
+
+# Права по умолчанию для ролей (без автоматических)
+ROLE_DEFAULT_SCREENS = {
+    "user": ["dashboard", "inventory", "transactions"],
+    "technologist": ["dashboard", "inventory", "details", "routes", "materials", "transactions"],
+    "storekeeper": ["dashboard", "inventory", "transactions", "import_export", "workshop_inventory"],
+    "master": ["dashboard", "inventory", "details", "routes", "materials", "equipment", "transactions", "workshop_inventory"],
+    "foreman": ["dashboard", "inventory", "details", "routes", "materials", "equipment", "reports", "transactions", "workshop_inventory", "planning", "planning_calendar", "planning_gantt"],
+    "admin": [s["id"] for s in ALL_SCREENS],
+    "chief_designer": ["dashboard", "details", "routes", "materials", "reports", "planning_settings", "transactions"],
+    "chief_engineer": ["dashboard", "inventory", "details", "routes", "materials", "equipment", "reports", "transactions", "workshop_inventory", "planning", "planning_calendar", "planning_gantt"],
+    "technologist_designer": ["dashboard", "details", "routes", "materials", "equipment", "transactions", "workshop_inventory"],
+    "otk": ["dashboard", "otk"],
+}
+
+# Экраны которые добавляются автоматически по роли (НЕ в списке выбора)
+ROLE_AUTO_SCREENS = {
+    "user": ["my_page"],
+    "otk": ["otk", "order_card"],
+}
+
+# Роли с кастомным режимом просмотра маршрутов
+ROLE_ROUTE_VIEW_MODES = {
+    "otk": "all",
+    "admin": "all",
+}
+
 
 @router.get("/", response_class=HTMLResponse)
 async def users_list(request: Request, search: Optional[str] = Query(None)):
@@ -81,6 +147,22 @@ async def users_list(request: Request, search: Optional[str] = Query(None)):
             "equipment": equipment_list,
             "search": search,
             "role_options": ROLE_OPTIONS,
+            "all_screens": ALL_SCREENS,
+            "screen_groups": SCREEN_GROUPS,
+            "role_default_screens": ROLE_DEFAULT_SCREENS,
+            "role_auto_screens": ROLE_AUTO_SCREENS,
+            "role_route_view_mode": {
+                "user": "approved_only",
+                "otk": "all",
+                "storekeeper": "approved_only",
+                "technologist": "approved_only",
+                "technologist_designer": "approved_only",
+                "master": "approved_only",
+                "foreman": "approved_only",
+                "chief_designer": "approved_only",
+                "chief_engineer": "approved_only",
+                "admin": "all",
+            },
         },
     )
 
@@ -107,21 +189,39 @@ async def update_user(
         workstations_json = json.dumps(workstation)
         db.update_user_workstations(user_id, workstations_json)
 
-        # Обновить режим просмотра маршрутов
-        if hasattr(db, "update_user_route_view_mode"):
-            db.update_user_route_view_mode(user_id, route_view_mode)
+        # Получить текущие permissions чтобы не потерять route_view_mode
+        current_perms = None
+        if hasattr(db, "get_user_screen_permissions"):
+            current_perms = db.get_user_screen_permissions(user_id)
 
-        # Обновить права экранов
-        if hasattr(db, "update_user_screen_permissions"):
-            db.update_user_screen_permissions(user_id, screen)
+        # Формируем новые permissions как словарь {screens: [...], route_view_mode: "..."}
+        if isinstance(current_perms, dict):
+            # Сохраняем существующий route_view_mode если он там был
+            existing_mode = current_perms.get("route_view_mode", "approved_only")
+            screen_data = {
+                "screens": screen,
+                "route_view_mode": route_view_mode if route_view_mode else existing_mode,
+            }
+        else:
+            screen_data = {
+                "screens": screen,
+                "route_view_mode": route_view_mode if route_view_mode else "approved_only",
+            }
+
+        # Обновить permissions одним запросом (сохраняет и screens и route_view_mode)
+        if hasattr(db, "update_user_screen_permissions_dict"):
+            db.update_user_screen_permissions_dict(user_id, screen_data)
 
         # Если админ редактирует себя — обновить сессию
         if user.get("id") == user_id:
-            request.session["user"]["screen_permissions"] = screen
+            request.session["user"]["screen_permissions"] = screen_data
             request.session["user"]["role"] = role
+            request.session["user"]["route_view_mode"] = screen_data["route_view_mode"]
 
         logger.info(
-            f"User {user_id} updated: role={role}, workstations={workstation}, screens={screen}"
+            f"User {user_id} updated: role={role}, workstations={workstation}, "
+            f"screens={screen}, route_view_mode={route_view_mode}, "
+            f"screen_data={screen_data}"
         )
     except Exception as e:
         logger.error(f"User update error: {e}")

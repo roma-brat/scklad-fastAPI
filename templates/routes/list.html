@@ -26,7 +26,7 @@
             <label class="flex items-center gap-2 text-sm text-gray-700 whitespace-nowrap cursor-pointer">
                 <input type="checkbox" name="approved_only" value="1"
                        class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                       {% if show_all_routes %}checked{% endif %}>
+                       {% if not approved_only %}checked{% endif %}>
                 <span>Показать все</span>
             </label>
             <!-- Sort -->

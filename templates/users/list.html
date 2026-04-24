@@ -157,12 +157,16 @@
 
                 <!-- Route View Mode -->
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Просмотр маршрутов</label>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="block text-sm font-medium text-gray-700">Просмотр маршрутов</label>
+                        <span id="route-mode-display" class="text-sm text-gray-500">—</span>
+                    </div>
                     <select name="route_view_mode" id="modal-route-mode"
                             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                         <option value="approved_only">Только утверждённые</option>
                         <option value="all">Все маршруты</option>
                     </select>
+                    <p class="mt-1 text-xs text-gray-500">Выберите какие маршруты видит пользователь: только утверждённые или все</p>
                 </div>
 
                 <!-- Screen Permissions - Grouped -->
@@ -403,16 +407,8 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('modal-role').value = user.role;
         document.getElementById('delete-user-id').value = user.id;
 
-        // Установить режим просмотра маршрутов
-        document.getElementById('modal-route-mode').value = 'approved_only'; // По умолчанию
-
-        // Отметить станки
-        const workstations = parseWorkstations(user.workstations);
-        document.querySelectorAll('input[name="workstation"]').forEach(cb => {
-            cb.checked = workstations.includes(cb.value);
-        });
-
-        // Загрузить права экранов ИЗ БД (а не дефолтные по роли!)
+// Загрузить права экранов ИЗ БД (а не дефолтные по роли!)
+        // route_view_mode устанавливается внутри loadUserScreenPermissions из данных БД
         await loadUserScreenPermissions(user.id, user.role);
 
         document.getElementById('edit-modal').classList.remove('hidden');
@@ -438,11 +434,15 @@ document.addEventListener('DOMContentLoaded', function() {
             if (resp.ok) {
                 const data = await resp.json();
 
-                // DB может вернуть в формате {screens: [...], route_view_mode: "..."}
+                // route_view_mode возвращается отдельным полем из API
+                if (data.route_view_mode) {
+                    routeViewMode = data.route_view_mode;
+                }
+
+                // DB может вернуть screen_permissions в формате {screens: [...], route_view_mode: "..."}
                 if (data.screen_permissions) {
                     if (typeof data.screen_permissions === 'object' && data.screen_permissions.screens !== undefined) {
                         screenPermissions = data.screen_permissions.screens;
-                        routeViewMode = data.screen_permissions.route_view_mode || 'approved_only';
                     } else if (Array.isArray(data.screen_permissions)) {
                         screenPermissions = data.screen_permissions;
                     }
@@ -454,6 +454,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Установить route_view_mode
         document.getElementById('modal-route-mode').value = routeViewMode;
+
+        // Показываем текущий режим в интерфейсе
+        const routeModeDisplay = document.getElementById('route-mode-display');
+        if (routeModeDisplay) {
+            routeModeDisplay.textContent = routeViewMode === 'all' ? 'Все маршруты' : 'Только утверждённые';
+        }
 
         // Если есть из БД — используем их, иначе — дефолт по роли
         let defaults;
@@ -468,71 +474,42 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
 // ==================== SCREEN PERMISSIONS ====================
-    // Полный список всех страниц системы с группировкой
+    // Полный список всех страниц системы с группировкой (передаётся с сервера)
     // Примечание: otk, order_card, my_page - добавляются автоматически по роли и НЕ показываются в списке выбора
-    const ALL_SCREENS = [
-        // Основные (без my_page - только для user)
-        {id: 'dashboard', title: 'Главная', group: 'main'},
-        
-        // Склад
-        {id: 'inventory', title: 'Склад инструментов', group: 'sklad'},
-        {id: 'workshop_inventory', title: 'Инструменты на станках', group: 'sklad'},
-        {id: 'transactions', title: 'История операций', group: 'sklad'},
-        
-        // Производство
-        {id: 'details', title: 'Детали (ДСЕ)', group: 'production'},
-        {id: 'routes', title: 'Маршруты', group: 'production'},
-        
-        // Планирование
-        {id: 'planning', title: 'План заказов', group: 'planning'},
-        {id: 'planning_calendar', title: 'Календарь', group: 'planning'},
-        {id: 'planning_gantt', title: 'Ганта', group: 'planning'},
-        {id: 'planning_settings', title: 'Настройки плана', group: 'planning'},
-        
-        // Материалы и оборудование
-        {id: 'materials', title: 'Материалы', group: 'materials'},
-        {id: 'equipment', title: 'Оборудование', group: 'materials'},
-        
-        // Администрирование
-        {id: 'reports', title: 'Отчёты', group: 'admin'},
-        {id: 'import_export', title: 'Импорт/Экспорт', group: 'admin'},
-        {id: 'users', title: 'Пользователи', group: 'admin'},
-    ];
+    const ALL_SCREENS = {{ all_screens | tojson | safe }};
 
-    // Группировка экранов (только для отображения в UI)
-    const SCREEN_GROUPS = {
-        'main': {title: 'Основные', icons: 'fa-home'},
-        'sklad': {title: 'Склад', icons: 'fa-boxes'},
-        'production': {title: 'Производство', icons: 'fa-cogs'},
-        'planning': {title: 'Планирование', icons: 'fa-calendar-alt'},
-        'materials': {title: 'Материалы и оборудование', icons: 'fa-layer-group'},
-        'admin': {title: 'Администрирование', icons: 'fa-chart-bar'},
-    };
+    // Группировка экранов (передаётся с сервера)
+    const SCREEN_GROUPS = {{ screen_groups | tojson | safe }};
 
     // Экраны которые добавляются автоматически по роли (НЕ в списке выбора)
-    const ROLE_AUTO_SCREENS = {
-        'user': ['my_page'],
-        'otk': ['otk', 'order_card'],
-    };
+    const ROLE_AUTO_SCREENS = {{ role_auto_screens | tojson | safe }};
 
     // Права по умолчанию для ролей (без автоматических)
-    const ROLE_DEFAULT_SCREENS = {
-        'user': ['dashboard', 'inventory', 'transactions'],
-        'technologist': ['dashboard', 'inventory', 'details', 'routes', 'materials', 'transactions'],
-        'storekeeper': ['dashboard', 'inventory', 'transactions', 'import_export', 'workshop_inventory'],
-        'master': ['dashboard', 'inventory', 'details', 'routes', 'materials', 'equipment', 'transactions', 'workshop_inventory'],
-        'foreman': ['dashboard', 'inventory', 'details', 'routes', 'materials', 'equipment', 'reports', 'transactions', 'workshop_inventory', 'planning', 'planning_calendar', 'planning_gantt'],
-        'admin': ALL_SCREENS.map(s => s.id),
-        'chief_designer': ['dashboard', 'details', 'routes', 'materials', 'reports', 'planning_settings', 'transactions'],
-        'chief_engineer': ['dashboard', 'inventory', 'details', 'routes', 'materials', 'equipment', 'reports', 'transactions', 'workshop_inventory', 'planning', 'planning_calendar', 'planning_gantt'],
-        'technologist_designer': ['dashboard', 'details', 'routes', 'materials', 'equipment', 'transactions', 'workshop_inventory'],
-    };
+    const ROLE_DEFAULT_SCREENS = {{ role_default_screens | tojson | safe }};
+
+    // Режим просмотра маршрутов по умолчанию для каждой роли
+    const ROLE_ROUTE_VIEW_MODE = {{ role_route_view_mode | tojson | safe }};
 
     // Получить все права для роли (включая автоматические)
     function getAllScreensForRole(role) {
         const base = ROLE_DEFAULT_SCREENS[role] || [];
         const auto = ROLE_AUTO_SCREENS[role] || [];
         return [...base, ...auto];
+    }
+
+    // Показать дефолтный режим для роли при смене роли
+    function onRoleChange() {
+        const roleSelect = document.getElementById('modal-role');
+        const routeModeSelect = document.getElementById('modal-route-mode');
+        const routeModeDisplay = document.getElementById('route-mode-display');
+        if (roleSelect && routeModeSelect) {
+            const newRole = roleSelect.value;
+            const defaultMode = ROLE_ROUTE_VIEW_MODE[newRole] || 'approved_only';
+            routeModeSelect.value = defaultMode;
+            if (routeModeDisplay) {
+                routeModeDisplay.textContent = defaultMode === 'all' ? 'Все маршруты' : 'Только утверждённые';
+            }
+        }
     }
 
     // Рендер групп с чекбоксами
@@ -612,6 +589,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (roleSelect) {
             roleSelect.addEventListener('change', function() {
                 resetAllGroups();
+                onRoleChange(); // Обновить режим просмотра маршрутов
             });
         }
     });
