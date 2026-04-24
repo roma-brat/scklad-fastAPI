@@ -10,7 +10,7 @@
 # ============================================
 
 # Базовый образ
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 # Рабочая директория
 WORKDIR /app
