@@ -26,7 +26,7 @@
     <!-- Font Awesome для иконок -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css">
 </head>
-<body class="h-full bg-white" style="background-color: #ffffff !important; color: #1a1a1a;">
+<body class="h-full bg-white" hx-boost="false" style="background-color: #ffffff !important; color: #1a1a1a;">
     <div class="flex h-screen overflow-hidden" style="background-color: #ffffff;">
         {% if current_user and show_sidebar|default(true) %}
         <!-- Sidebar -->

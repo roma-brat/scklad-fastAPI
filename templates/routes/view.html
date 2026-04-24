@@ -3,8 +3,7 @@
 {% block title %}Маршрут: {{ route.designation }}{% endblock %}
 
 {% block content %}
-<div x-data="viewRouteApp({{ route.id }})" @edit-operation.window="handleEditOperation($event.detail)" class="min-h-screen bg-gray-50">
-    <!-- Header -->
+<div x-data="viewRouteApp({{ route.id }})" @edit-operation.window="handleEditOperation($event.detail)" @open-edit-modal.window="openEditModal($event.detail.id)" class="min-h-screen bg-gray-50">
     <div class="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div class="flex items-center gap-3 min-w-0 flex-1">
@@ -115,6 +114,25 @@
                     <div><dt class="text-gray-600">Создал:</dt><dd class="text-gray-900">{{ route.created_by }}</dd></div>
                     {% endif %}
                     <div><dt class="text-gray-600">Дата создания:</dt><dd class="text-gray-900">{{ route.created_at.strftime('%d.%m.%Y %H:%M') if route.created_at else '-' }}</dd></div>
+                    
+                    {% if route.pdf_file %}
+                    <div class="pt-3 border-t border-gray-200 mt-3">
+                        <dt class="text-gray-600 font-semibold mb-2">
+                            <i class="fas fa-file-pdf mr-1 text-red-600"></i>Прикрепленный PDF
+                        </dt>
+                        <div class="flex items-center space-x-2">
+                            <a href="/routes/{{ route.id }}/pdf" target="_blank"
+                               class="inline-flex items-center px-3 py-1.5 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition text-sm">
+                                <i class="fas fa-eye mr-2"></i>Просмотреть PDF
+                            </a>
+                            <button type="button" onclick="deleteRoutePdf({{ route.id }})"
+                                    class="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm"
+                                    title="Удалить PDF">
+                                <i class="fas fa-trash mr-2"></i>Удалить
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
                 </dl>
             </div>
 
@@ -123,10 +141,10 @@
                 <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
                     <h2 class="text-base sm:text-lg font-bold text-gray-900">Операции ({{ operations|length }})</h2>
                     <div class="flex gap-2 w-full sm:w-auto">
-                        <button type="button" onclick="openOperationDialog()" class="flex-1 sm:flex-none px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">
+<button type="button" onclick="document.getElementById('operation-dialog').classList.remove('hidden')" class="flex-1 sm:flex-none px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">
                             <i class="fas fa-plus mr-2"></i>Добавить
                         </button>
-                        <button type="button" @click="openEditModal({{ route.id }})" class="flex-1 sm:flex-none px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+                        <button type="button" id="btn-edit-route" class="flex-1 sm:flex-none px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
                             <i class="fas fa-edit mr-2"></i>Редактировать
                         </button>
                     </div>
@@ -194,14 +212,14 @@
                                 <td class="px-3 py-2 text-center">
                                     <div class="flex items-center justify-center space-x-1">
                                         {% if not loop.first %}
-                                        <button type="button" onclick="moveOperation({{ op.id }}, -1)" class="p-1 text-blue-600 hover:text-blue-800" title="Переместить вверх">
+                                        <button type="button" onclick="window.moveOperation({{ op.id }}, -1)" class="p-1 text-blue-600 hover:text-blue-800" title="Переместить вверх">
                                             <i class="fas fa-arrow-up"></i>
                                         </button>
                                         {% else %}
                                         <span class="p-1 text-gray-300 cursor-not-allowed"><i class="fas fa-arrow-up"></i></span>
                                         {% endif %}
                                         {% if not loop.last %}
-                                        <button type="button" onclick="moveOperation({{ op.id }}, 1)" class="p-1 text-blue-600 hover:text-blue-800" title="Переместить вниз">
+                                        <button type="button" onclick="window.moveOperation({{ op.id }}, 1)" class="p-1 text-blue-600 hover:text-blue-800" title="Переместить вниз">
                                             <i class="fas fa-arrow-down"></i>
                                         </button>
                                         {% else %}
@@ -214,7 +232,7 @@
                                         <button type="button" onclick="editOperation({{ op.id }})" class="p-1 text-green-600 hover:text-green-800" title="Редактировать операцию">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        <button type="button" onclick="deleteOperation({{ op.id }})" class="p-1 text-red-600 hover:text-red-800" title="Удалить операцию">
+                                        <button type="button" onclick="window.deleteOperation({{ op.id }})" class="p-1 text-red-600 hover:text-red-800" title="Удалить операцию">
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </div>
@@ -303,11 +321,11 @@
                 <div class="flex items-center gap-4">
                     <span class="text-sm text-gray-600">Режим:</span>
                     <div class="flex rounded-lg overflow-hidden border border-gray-200" id="coop-toggle-group">
-                        <button type="button" id="coop-no" onclick="toggleCoop(false)"
+                        <button type="button" id="coop-no" onclick="window.toggleCoop(false)"
                                 class="px-4 py-2 text-sm font-medium bg-indigo-600 text-white transition">
                             Свое
                         </button>
-                        <button type="button" id="coop-yes" onclick="toggleCoop(true)"
+                        <button type="button" id="coop-yes" onclick="window.toggleCoop(true)"
                                 class="px-4 py-2 text-sm font-medium bg-white text-gray-600 hover:bg-gray-50 transition">
                             По кооперации
                         </button>
@@ -408,11 +426,11 @@
             </div>
 
             <div class="flex justify-end space-x-3 mt-6">
-                <button type="button" onclick="closeOperationDialog()"
+                <button type="button" onclick="window.closeOperationDialog()"
                         class="px-4 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 transition">
                     Отмена
                 </button>
-                <button type="button" id="op-dialog-submit" onclick="handleDialogSubmit()"
+                <button type="button" id="op-dialog-submit" onclick="window.handleDialogSubmit()"
                         class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
                     <i id="op-dialog-submit-icon" class="fas fa-plus mr-2"></i><span id="op-dialog-submit-text">Добавить</span>
                 </button>
@@ -456,7 +474,7 @@
                 <div class="bg-gray-50 rounded-lg p-4">
                     <div class="flex items-center justify-between mb-3">
                         <h4 class="text-lg font-semibold text-gray-900"><i class="fas fa-cube mr-2 text-blue-600"></i>Материал</h4>
-                        <button type="button" onclick="openMaterialDialog()"
+                        <button type="button" onclick="window.openMaterialDialog()"
                                 class="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm transition-colors">
                             <i class="fas fa-plus mr-1"></i>Добавить
                         </button>
@@ -683,11 +701,11 @@
         </div>
 
         <div class="flex justify-end space-x-3 mt-6">
-            <button type="button" onclick="closeMaterialDialog()"
+            <button type="button" onclick="window.closeMaterialDialog()"
                     class="px-4 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 transition">
                 Отмена
             </button>
-            <button type="button" onclick="saveMaterial()"
+            <button type="button" onclick="window.saveMaterial()"
                     class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
                 <i class="fas fa-save mr-2"></i>Сохранить
             </button>
@@ -828,18 +846,13 @@ async function editOperation(opId) {
 
 // ===== ДИАЛОГ ОПЕРАЦИЙ (Vanilla JS, как в planner) =====
 
-let isCooperation = false;
-let operationsList = [];
-let operationCounter = 0;
-let editingOpId = null; // ID редактируемой операции (null = режим добавления)
+var isCooperation = false;
+var operationsList = [];
+var operationCounter = 0;
+var editingOpId = null; // ID редактируемой операции (null = режим добавления)
 
-// Справочные данные из Jinja2
-const workshopsData = {{ workshops | default([]) | tojson }};
-const operationTypesData = {{ operation_types | default([]) | tojson }};
-const equipmentListData = {{ equipment_list | default([]) | tojson }};
-const cooperativesData = {{ cooperatives | default([]) | tojson }};
-
-function toggleCoop(enabled) {
+// Expose functions to window immediately so Alpine can find them
+window.toggleCoop = function(enabled) {
     isCooperation = enabled;
     const ownFields = document.getElementById('coop-fields-own');
     const coopFields = document.getElementById('coop-fields-coop');
@@ -1346,7 +1359,15 @@ async function saveEditOperation() {
 }
 
 function viewRouteApp(routeId) {
-    return {
+    // Store reference to this instance globally for onclick handlers
+    window.routeAppInstance = {
+        openEditModal: function(id) {
+            // This will be called before Alpine initializes, so we need to store the id and call later
+            window.pendingOpenEditModal = id;
+        }
+    };
+    
+    var app = {
         showEditModal: false, editRouteId: null, showAddOpDialog: false, editingOpId: null,
         editForm: {
             designation: '', detail_name: '', version: '1.0', length: null, width: null, quantity: 1, waste_percent: 0,
@@ -1360,26 +1381,17 @@ function viewRouteApp(routeId) {
         operationTypes: [], equipmentList: [],
         newOp: { operation_type_id: '', equipment_id: '', duration_minutes: 0, prep_time: 0, control_time: 0, parts_count: 1, notes: '' },
 
-        getMaterialSizes(sortament, mark) {
-            if (!sortament || !mark || !this.materialsData[sortament] || !this.materialsData[sortament][mark]) return [];
-            
-            // Сортировка размеров от меньшего к большему
-            const materials = this.materialsData[sortament][mark];
-            return materials.slice().sort((a, b) => {
-                const dimsA = (a.dimension_str || '').split('х').map(s => parseFloat(s.trim()) || 0);
-                const dimsB = (b.dimension_str || '').split('х').map(s => parseFloat(s.trim()) || 0);
-                
-                // Сравниваем по первому, потом по второму, потом по третьему измерению
-                for (let i = 0; i < Math.max(dimsA.length, dimsB.length); i++) {
-                    const valA = dimsA[i] || 0;
-                    const valB = dimsB[i] || 0;
-                    if (valA !== valB) return valA - valB;
-                }
-                return 0;
-            });
+        init: function() {
+            // If there was a pending openEditModal call, execute it now
+            var self = this;
+            if (window.pendingOpenEditModal) {
+                var id = window.pendingOpenEditModal;
+                window.pendingOpenEditModal = null;
+                setTimeout(function() { self.openEditModal(id); }, 100);
+            }
         },
 
-        onDetailChange() {
+        onDetailChange: function() {
             const detailId = this.editForm.detail_id;
             if (!detailId || !this.detailsList.length) {
                 this.editForm.designation = '';
@@ -1413,8 +1425,29 @@ function viewRouteApp(routeId) {
             this.editMaterialSizes = this.getMaterialSizes(s, m);
         },
 
+        getMaterialSizes(sortament, mark) {
+            if (!sortament || !mark || !this.materialsData[sortament] || !this.materialsData[sortament][mark]) return [];
+            
+            // Сортировка размеров от меньшего к большему
+            const materials = this.materialsData[sortament][mark];
+            return materials.slice().sort((a, b) => {
+                const dimsA = (a.dimension_str || '').split('х').map(s => parseFloat(s.trim()) || 0);
+                const dimsB = (b.dimension_str || '').split('х').map(s => parseFloat(s.trim()) || 0);
+                
+                // Сравниваем по первому, потом по второму, потом по третьему измерению
+                for (let i = 0; i < Math.max(dimsA.length, dimsB.length); i++) {
+                    const valA = dimsA[i] || 0;
+                    const valB = dimsB[i] || 0;
+                    if (valA !== valB) return valA - valB;
+                }
+                return 0;
+            });
+        },
+
         async openEditModal(id) {
+            console.log('openEditModal called with id:', id);
             this.editRouteId = id; this.showEditModal = true; this.editLoading = true;
+            console.log('showEditModal set to true');
             
             // Сначала загружаем справочные данные
             try {
@@ -1640,6 +1673,11 @@ function viewRouteApp(routeId) {
             }, 100);
         },
     };
+    
+    // Store reference globally for onclick handlers
+    window.routeApp = app;
+    
+    return app;
 }
 
 // ===== ФУНКЦИИ ДЛЯ ДИАЛОГА МАТЕРИАЛА =====
@@ -1739,5 +1777,68 @@ async function saveMaterial() {
         alert('Ошибка сети: ' + e.message);
     }
 }
+// Удаление PDF файла маршрута
+async function deleteRoutePdf(routeId) {
+    if (!confirm('Вы уверены, что хотите удалить PDF файл?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/routes/${routeId}/pdf`, {
+            method: 'DELETE'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Ошибка удаления: ' + data.error);
+        }
+    } catch (error) {
+        alert('Ошибка удаления: ' + error);
+    }
+}
+
+// Expose functions to window for Alpine to access
+window.toggleCoop = toggleCoop;
+window.openOperationDialog = function() {
+    editingOpId = null;
+    document.getElementById('op-dialog-title').innerHTML = '<i class="fas fa-cog mr-2 text-indigo-600"></i>Добавление операции';
+    document.getElementById('op-dialog-submit-text').textContent = 'Добавить';
+    document.getElementById('op-dialog-submit-icon').className = 'fas fa-plus mr-2';
+    document.getElementById('operation-dialog').classList.remove('hidden');
+    isCooperation = false;
+    window.toggleCoop(false);
+    document.getElementById('op-type').value = '';
+    document.getElementById('op-equipment').innerHTML = '<option value="">— Сначала выберите операцию —</option>';
+    document.getElementById('op-workshop').value = '';
+    document.getElementById('op-prep-time').value = '0';
+    document.getElementById('op-control-time').value = '0';
+    document.getElementById('op-parts-count').value = '1';
+    document.getElementById('op-duration').value = '0';
+    document.getElementById('op-coop-company').value = '';
+    document.getElementById('op-coop-operation').value = '';
+    document.getElementById('op-coop-cost').value = '0';
+    document.getElementById('op-coop-duration-days').value = '0';
+    document.getElementById('op-notes').value = '';
+};
+window.closeOperationDialog = closeOperationDialog;
+window.addOperation = addOperation;
+window.deleteOperation = deleteOperation;
+window.handleDialogSubmit = handleDialogSubmit;
+window.openMaterialDialog = openMaterialDialog;
+window.closeMaterialDialog = closeMaterialDialog;
+window.onMatSortamentChange = onMatSortamentChange;
+window.onMatMarkChange = onMatMarkChange;
+
+// Навешиваем обработчик на кнопку "Редактировать" после загрузки страницы
+document.addEventListener('DOMContentLoaded', function() {
+    var editBtn = document.getElementById('btn-edit-route');
+    if (editBtn) {
+        editBtn.addEventListener('click', function() {
+            window.dispatchEvent(new CustomEvent('open-edit-modal', {detail: {id: {{ route.id }}}}));
+        });
+    }
+});
 </script>
 {% endblock %}

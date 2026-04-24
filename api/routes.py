@@ -102,14 +102,41 @@ async def routes_list(
 
 @router.get("/create", response_class=HTMLResponse)
 async def create_route_page(
-    request: Request, detail_designation: Optional[str] = Query(None)
+    request: Request, 
+    detail_designation: Optional[str] = Query(None),
+    route_id: Optional[int] = Query(None),
 ):
-    """Страница создания маршрута"""
+    """Страница создания/редактирования маршрута"""
     user = get_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=303)
 
     db = get_db()
+    
+    # Проверяем режим редактирования
+    is_edit_mode = False
+    existing_route = None
+    existing_operations = []
+    
+    if route_id:
+        # Загружаем данные маршрута для редактирования
+        existing_route = db.get_route_by_id(route_id)
+        if existing_route:
+            is_edit_mode = True
+            # Загружаем операции
+            existing_operations = db.get_route_operations(route_id)
+            logger.info(f"Edit mode: loading route {route_id} with {len(existing_operations)} operations")
+            
+            # Конвертируем datetime в строки для JSON сериализации
+            if existing_route:
+                for key, value in existing_route.items():
+                    if hasattr(value, 'isoformat'):
+                        existing_route[key] = value.isoformat()
+            for op in existing_operations:
+                for key, value in op.items():
+                    if hasattr(value, 'isoformat'):
+                        op[key] = value.isoformat()
+    
     try:
         details = db.get_all_details()
         materials = db.get_all_materials() if hasattr(db, "get_all_materials") else []
@@ -195,6 +222,9 @@ async def create_route_page(
             "sortaments": sortaments,
             "materials_data": materials_data,
             "detail_designation": detail_designation,
+            "is_edit_mode": is_edit_mode,
+            "existing_route": existing_route,
+            "existing_operations": existing_operations,
         },
     )
 
@@ -336,6 +366,24 @@ async def view_route(request: Request, route_id: int):
             if hasattr(db, "get_cooperative_companies")
             else []
         )
+        
+        # Загружаем materials_data для шаблона
+        sortaments = []
+        materials_data = {}
+        if hasattr(db, "get_all_material_instances"):
+            instances = db.get_all_material_instances()
+            for mi in instances:
+                sortament = mi.get("sortament_name") or ""
+                mark = mi.get("mark_name") or ""
+                if not sortament or not mark:
+                    continue
+                if sortament not in sortaments:
+                    sortaments.append(sortament)
+                    materials_data[sortament] = {}
+                if mark not in materials_data[sortament]:
+                    materials_data[sortament][mark] = []
+                materials_data[sortament][mark].append(mi)
+            sortaments = sorted(sortaments)
 
         return templates.TemplateResponse(
             "routes/view.html",
@@ -348,6 +396,8 @@ async def view_route(request: Request, route_id: int):
                 "operation_types": operation_types,
                 "equipment_list": equipment_list,
                 "cooperatives": cooperatives,
+                "materials_data": materials_data,
+                "sortaments": sortaments,
             },
         )
     except Exception as e:
@@ -876,3 +926,121 @@ async def update_route_material(request: Request, route_id: int):
     except Exception as e:
         logger.error(f"Update route material error: {e}")
         return JSONResponse({"error": f"Failed to update: {str(e)}"}, status_code=500)
+
+
+# ==================== PDF для маршрута ====================
+
+from fastapi import UploadFile, File
+import shutil
+import uuid
+
+# Директория для хранения PDF файлов маршрутов
+ROUTE_PDF_DIR = os.path.join(os.path.dirname(__file__), "..", "route_pdfs")
+os.makedirs(ROUTE_PDF_DIR, exist_ok=True)
+
+
+@router.post("/{route_id}/pdf/upload")
+async def upload_route_pdf(request: Request, route_id: int, file: UploadFile = File(...)):
+    """Загрузка PDF файла к маршруту"""
+    user = get_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    # Проверяем, что это PDF
+    if not file.filename.lower().endswith('.pdf'):
+        return JSONResponse({"error": "Разрешены только PDF файлы"}, status_code=400)
+
+    db = get_db()
+    try:
+        # Получаем маршрут для проверки
+        route = db.get_route_by_id(route_id)
+        if not route:
+            return JSONResponse({"error": "Маршрут не найден"}, status_code=404)
+
+        # Генерируем уникальное имя файла
+        file_ext = ".pdf"
+        unique_filename = f"route_{route_id}_{uuid.uuid4().hex[:8]}{file_ext}"
+        file_path = os.path.join(ROUTE_PDF_DIR, unique_filename)
+
+        # Сохраняем файл
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        # Обновляем запись в БД
+        pdf_url = f"/routes/{route_id}/pdf"
+        db.update_route(route_id=route_id, pdf_file=unique_filename, pdf_path=pdf_url)
+
+        logger.info(f"PDF uploaded for route {route_id}: {unique_filename} by {user.get('username')}")
+        return JSONResponse({
+            "success": True,
+            "pdf_file": unique_filename,
+            "pdf_url": pdf_url
+        })
+
+    except Exception as e:
+        logger.error(f"Upload route PDF error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@router.get("/{route_id}/pdf")
+async def get_route_pdf(request: Request, route_id: int):
+    """Скачивание/просмотр PDF файла маршрута"""
+    user = get_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+
+    db = get_db()
+    try:
+        route = db.get_route_by_id(route_id)
+        if not route:
+            return JSONResponse({"error": "Маршрут не найден"}, status_code=404)
+
+        pdf_filename = route.get("pdf_file")
+        if not pdf_filename:
+            return JSONResponse({"error": "PDF файл не прикреплён"}, status_code=404)
+
+        file_path = os.path.join(ROUTE_PDF_DIR, pdf_filename)
+        if not os.path.exists(file_path):
+            return JSONResponse({"error": "Файл не найден на сервере"}, status_code=404)
+
+        return FileResponse(
+            file_path,
+            media_type="application/pdf",
+            filename=f"route_{route_id}.pdf"
+        )
+
+    except Exception as e:
+        logger.error(f"Get route PDF error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@router.delete("/{route_id}/pdf")
+async def delete_route_pdf(request: Request, route_id: int):
+    """Удаление PDF файла маршрута"""
+    user = get_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    db = get_db()
+    try:
+        route = db.get_route_by_id(route_id)
+        if not route:
+            return JSONResponse({"error": "Маршрут не найден"}, status_code=404)
+
+        pdf_filename = route.get("pdf_file")
+        if pdf_filename:
+            # Удаляем файл с диска
+            file_path = os.path.join(ROUTE_PDF_DIR, pdf_filename)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                logger.info(f"PDF file deleted: {pdf_filename}")
+
+            # Очищаем запись в БД
+            db.update_route(route_id=route_id, pdf_file=None, pdf_path=None)
+
+        logger.info(f"PDF deleted for route {route_id} by {user.get('username')}")
+        return JSONResponse({"success": True})
+
+    except Exception as e:
+        logger.error(f"Delete route PDF error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
