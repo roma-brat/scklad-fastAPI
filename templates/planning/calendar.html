@@ -482,6 +482,12 @@
                 <i class="fas fa-check mr-1"></i>Завершить
             </button>
         </div>
+        <!-- Кнопка PDF маршрута -->
+        <div id="route-pdf-section" class="mt-2 hidden">
+            <button onclick="viewRoutePdf()" id="btn-route-pdf" class="flex-1 px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm w-full">
+                <i class="fas fa-file-pdf mr-1"></i>Просмотреть PDF чертежа
+            </button>
+        </div>
         
         <!-- Информация о связанном станке -->
         <div class="mt-3 p-2 bg-gray-50 rounded text-xs text-gray-600">
@@ -998,6 +1004,9 @@ function openEditDialog(scheduleId) {
                 document.getElementById('edit-detail-designation').textContent = item.designation || '—';
                 document.getElementById('edit-detail-name').textContent = item.detail_name || '—';
 
+                // Сохраняем route_id для PDF
+                window._currentRouteId = item.route_id;
+                
                 // Количество на сегодня (из schedule item quantity, не общее количество заказа)
                 const scheduledQty = item.quantity || 1;
                 document.getElementById('edit-detail-qty').textContent = `${scheduledQty} шт.`;
@@ -1020,6 +1029,14 @@ function openEditDialog(scheduleId) {
                 // Тип производства
                 const prodType = item.production_type === 'batch' ? '📦 Партийное' : '🔹 Штучное';
                 document.getElementById('edit-detail-type').textContent = prodType;
+                
+                // Показываем/скрываем кнопку PDF если есть route_id
+                const routePdfSection = document.getElementById('route-pdf-section');
+                if (item.route_id) {
+                    routePdfSection.classList.remove('hidden');
+                } else {
+                    routePdfSection.classList.add('hidden');
+                }
                 
                 // Заполняем выпадающий список станков только из той же группы (по типу операции)
                 const equipmentSelect = document.getElementById('edit-equipment');
@@ -1066,6 +1083,18 @@ function openEditDialog(scheduleId) {
 
 function closeEditDialog() {
     document.getElementById('edit-dialog').classList.add('hidden');
+}
+
+// Функция для просмотра PDF чертежа маршрута
+function viewRoutePdf() {
+    const routeId = window._currentRouteId;
+    if (!routeId) {
+        showToast('Маршрут не найден', 'error');
+        return;
+    }
+    
+    // Открываем PDF в новой вкладке
+    window.open(`/routes/${routeId}/pdf`, '_blank');
 }
 
 function loadAllEquipment(equipmentSelect, selectedId) {

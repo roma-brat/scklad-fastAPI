@@ -135,7 +135,7 @@
                         {% endif %}
 
                         <!-- Edit Route -->
-                        <a href="/routes/{{ route.id }}"
+                        <a href="/routes/{{ route.id }}" hx-boost="false" target="_top"
                            class="p-1.5 rounded hover:bg-gray-100 transition-colors inline-block"
                            title="Редактировать маршрут">
                             <i class="fas fa-edit text-green-600 text-sm"></i>
