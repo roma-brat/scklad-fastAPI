@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}ОТК - Проверка первой детали{% endblock %}
+
+{% block content %}
+<div class="bg-white border-b border-gray-200 px-6 py-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">
+                <i class="fas fa-clipboard-check mr-2 text-orange-600"></i>ОТК - Проверка первой детали
+            </h1>
+            <p class="text-gray-600 mt-1">Задачи на проверку</p>
+        </div>
+    </div>
+</div>
+
+<div class="p-6">
+    {% if otk_tasks %}
+    <div class="space-y-4">
+        {% for task in otk_tasks %}
+        <div class="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
+            <div class="flex items-start justify-between">
+                <div class="flex-1">
+                    <h3 class="text-lg font-bold text-gray-900">
+                        {{ task.designation or task.detail_name or 'Без обозначения' }}
+                    </h3>
+                    <p class="text-gray-600">{{ task.detail_name or '' }}</p>
+                    <div class="mt-2 flex items-center gap-4 text-sm text-gray-500">
+                        <span><i class="fas fa-cog mr-1"></i>{{ task.equipment_name or 'Не назначено' }}</span>
+                        <span><i class="fas fa-calendar mr-1"></i>{{ task.planned_date or '' }}</span>
+                        <span><i class="fas fa-box mr-1"></i>{{ task.order_quantity or task.quantity or 1 }} шт.</span>
+                    </div>
+                    {% if task.notes %}
+                    <div class="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>{{ task.notes }}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="flex gap-2 ml-4">
+                    <button onclick="approveTask({{ task.id }})" 
+                            class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+                        <i class="fas fa-check mr-2"></i>Деталь проверена
+                    </button>
+                    <button onclick="showRejectDialog({{ task.id }})" 
+                            class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>Есть замечание
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-12 text-gray-400">
+        <i class="fas fa-clipboard-check text-6xl mb-4"></i>
+        <p class="text-xl">Нет задач на проверку</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Dialog for rejection comment -->
+<div id="reject-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-96">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">Замечание к детали</h3>
+        <input type="hidden" id="reject-schedule-id">
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Комментарий:</label>
+            <textarea id="reject-comment" rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2"
+                      placeholder="Опишите замечание..."></textarea>
+        </div>
+        <div class="flex gap-2 mt-4">
+            <button onclick="submitReject()" class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                Отправить замечание
+            </button>
+            <button onclick="closeRejectDialog()" class="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
+                Отмена
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast notification -->
+<div id="toast" class="fixed bottom-4 right-4 px-6 py-3 bg-green-600 text-white rounded-lg shadow-lg transform translate-y-full transition-transform duration-300 z-50">
+    <span id="toast-message"></span>
+</div>
+
+<script>
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    document.getElementById('toast-message').textContent = message;
+    toast.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg transform transition-transform duration-300 z-50 ${type === 'error' ? 'bg-red-600' : 'bg-green-600'}`;
+    toast.classList.remove('translate-y-full');
+    toast.classList.add('translate-y-0');
+    setTimeout(() => { toast.classList.remove('translate-y-0'); toast.classList.add('translate-y-full'); }, 3000);
+}
+
+function approveTask(scheduleId) {
+    if (!confirm('Подтвердить проверку? Деталь проверена, все хорошо.')) return;
+    
+    const formData = new FormData();
+    formData.append('schedule_id', scheduleId);
+    
+    fetch('/otk/api/approve', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Деталь проверена');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(data.message || 'Ошибка', 'error');
+            }
+        })
+        .catch(e => showToast('Ошибка: ' + e.message, 'error'));
+}
+
+function showRejectDialog(scheduleId) {
+    document.getElementById('reject-schedule-id').value = scheduleId;
+    document.getElementById('reject-comment').value = '';
+    document.getElementById('reject-dialog').classList.remove('hidden');
+}
+
+function closeRejectDialog() {
+    document.getElementById('reject-dialog').classList.add('hidden');
+}
+
+function submitReject() {
+    const scheduleId = document.getElementById('reject-schedule-id').value;
+    const comment = document.getElementById('reject-comment').value;
+    
+    if (!comment.trim()) {
+        alert('Введите комментарий');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('schedule_id', scheduleId);
+    formData.append('comment', comment);
+    
+    fetch('/otk/api/reject', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Замечание отправлено');
+                closeRejectDialog();
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(data.message || 'Ошибка', 'error');
+            }
+        })
+        .catch(e => showToast('Ошибка: ' + e.message, 'error'));
+}
+</script>
+{% endblock %}

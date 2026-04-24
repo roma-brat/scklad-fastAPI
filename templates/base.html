@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <title>{% block title %}Склад Инструментов{% endblock %}</title>
+
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
+
+    <!-- Tailwind CSS — локальная сборка -->
+    <link rel="stylesheet" href="{{ url_for('static', path='css/tailwind-built.css') }}">
+
+    <!-- Custom CSS — загружаем ПОСЛЕ Tailwind для переопределения стилей -->
+    <link rel="stylesheet" href="{{ url_for('static', path='css/custom.css') }}">
+
+    <!-- HTMX -->
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.10/dist/htmx.min.js"></script>
+
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
+
+    <!-- Font Awesome для иконок -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css">
+</head>
+<body class="h-full bg-white" style="background-color: #ffffff !important; color: #1a1a1a;">
+    <div class="flex h-screen overflow-hidden" style="background-color: #ffffff;">
+        {% if current_user and show_sidebar|default(true) %}
+        <!-- Sidebar -->
+        <aside class="w-16 md:w-64 bg-white border-r border-gray-200 flex-shrink-0 transition-all duration-300">
+            {% include 'components/sidebar.html' %}
+        </aside>
+        {% endif %}
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-y-auto overflow-x-hidden bg-white" style="background-color: #ffffff;">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <!-- Flash Messages -->
+    <div id="flash-messages" class="fixed top-4 right-4 z-50 space-y-2 max-w-full px-4">
+        {% if success_message %}
+        <div class="flash-message flash-success px-4 sm:px-6 py-2 sm:py-3 rounded-lg shadow-lg text-sm sm:text-base">
+            <i class="fas fa-check-circle mr-2"></i>{{ success_message }}
+        </div>
+        {% endif %}
+
+        {% if error_message %}
+        <div class="flash-message flash-error px-4 sm:px-6 py-2 sm:py-3 rounded-lg shadow-lg text-sm sm:text-base">
+            <i class="fas fa-exclamation-circle mr-2"></i>{{ error_message }}
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        // Auto-hide flash messages
+        (function() {
+            var messages = document.querySelectorAll('.flash-message');
+            messages.forEach(function(msg) {
+                setTimeout(function() {
+                    msg.style.transition = 'opacity 0.5s ease';
+                    msg.style.opacity = '0';
+                    setTimeout(function() { msg.remove(); }, 500);
+                }, 3000);
+            });
+        })();
+    </script>
+
+    <script>
+        // Глобальные функции для работы с часовым поясом (Иркутск UTC+8)
+        window.TIMEZONE = 'Asia/Irkutsk';
+        
+        window.formatDateTime = function(dateStr) {
+            if (!dateStr) return '-';
+            try {
+                const date = new Date(dateStr);
+                return date.toLocaleString('ru-RU', { timeZone: window.TIMEZONE });
+            } catch (e) {
+                return dateStr;
+            }
+        };
+        
+        window.formatDate = function(dateStr) {
+            if (!dateStr) return '-';
+            try {
+                const date = new Date(dateStr);
+                return date.toLocaleDateString('ru-RU', { timeZone: window.TIMEZONE });
+            } catch (e) {
+                return dateStr;
+            }
+        };
+    </script>
+
+    <script src="{{ url_for('static', path='js/app.js') }}"></script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

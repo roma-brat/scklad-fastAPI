@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block title %}Главная | Склад Инструментов{% endblock %}
+
+{% block content %}
+{# ===================== ОПРЕДЕЛЕНИЕ ВИДИМОСТИ ЭКРАНОВ ===================== #}
+{# Получаем список экранов из permissions #}
+{% set user_screens = [] %}
+{% if current_user.screen_permissions is not none and current_user.screen_permissions is mapping %}
+    {% set user_screens = current_user.screen_permissions.screens | default([]) %}
+{% endif %}
+
+{# Admin имеет полный доступ если нет explicit permissions #}
+{% set has_full_access = current_user.role == 'admin' and not user_screens %}
+
+{# === ВСПОМОГАТЕЛЬНЫЕ ПРОВЕРКИ === #}
+{% set can_inventory = has_full_access or 'inventory' in user_screens %}
+{% set can_transactions = has_full_access or 'transactions' in user_screens %}
+{% set can_details = has_full_access or 'details' in user_screens %}
+{% set can_routes = has_full_access or 'routes' in user_screens %}
+{% set can_materials = has_full_access or 'materials' in user_screens %}
+{% set can_planning = has_full_access or 'planner' in user_screens or 'planning' in user_screens or 'plan' in user_screens %}
+{% set can_calendar = has_full_access or 'planning_calendar' in user_screens or 'calendar' in user_screens %}
+{% set can_gantt = has_full_access or 'gantt' in user_screens or 'planning_gantt' in user_screens %}
+{% set can_settings = has_full_access or current_user.role == 'admin' or 'planning_settings' in user_screens %}
+{% set can_reports = has_full_access or 'reports' in user_screens %}
+{% set can_users = has_full_access or current_user.role == 'admin' or 'users' in user_screens %}
+{% set can_import_export = has_full_access or 'import_export' in user_screens %}
+{% set can_workshop = has_full_access or 'workshop_inventory' in user_screens %}
+{% set can_equipment = has_full_access or 'equipment' in user_screens %}
+{% set can_my_page = has_full_access or 'my_page' in user_screens %}
+
+{# Fallback для ролей без explicit permissions (кроме admin) #}
+{% if not user_screens and current_user.role != 'admin' %}
+    {% set can_inventory = true %}
+    {% set can_transactions = current_user.role in ['admin', 'chief_designer', 'chief_engineer', 'technologist_designer', 'master', 'foreman', 'storekeeper', 'technologist'] %}
+    {% set can_details = current_user.role in ['admin', 'chief_designer', 'chief_engineer', 'technologist_designer', 'technologist', 'master', 'foreman'] %}
+    {% set can_routes = current_user.role in ['admin', 'chief_designer', 'chief_engineer', 'technologist_designer', 'technologist', 'master', 'foreman'] %}
+    {% set can_materials = true %}
+    {% set can_planning = true %}
+    {% set can_calendar = true %}
+    {% set can_gantt = true %}
+    {% set can_settings = current_user.role == 'admin' %}
+    {% set can_reports = current_user.role in ['admin', 'chief_engineer', 'chief_designer', 'foreman'] %}
+    {% set can_users = current_user.role == 'admin' %}
+    {% set can_import_export = current_user.role in ['admin', 'storekeeper'] %}
+    {% set can_workshop = current_user.role in ['admin', 'storekeeper', 'master', 'foreman', 'technologist_designer', 'chief_engineer'] %}
+    {% set can_equipment = current_user.role in ['admin', 'chief_engineer', 'technologist_designer', 'master', 'foreman'] %}
+{% set can_my_page = true %}
+{% endif %}
+
+{# === ИСПОЛЬЗОВАНИЕ ПЕРЕМЕННЫХ (show_*) === #}
+{% set show_production_section = can_details or can_routes %}
+{% set show_inventory = can_inventory %}
+{% set show_transactions = can_transactions %}
+{% set show_details = can_details %}
+{% set show_routes = can_routes %}
+{% set show_planning = can_planning %}
+{% set show_calendar = can_calendar %}
+{% set show_gantt = can_gantt %}
+{% set show_settings = can_settings %}
+{% set show_reports = can_reports %}
+{% set show_users = can_users %}
+{% set show_import_export = can_import_export %}
+{% set show_my_page = can_my_page %}
+{% set show_workshop_inventory = can_workshop %}
+{% set show_equipment = can_equipment %}
+
+<div class="bg-white border-b border-gray-200 px-6 py-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Добро пожаловать, {{ current_user.username }}!</h1>
+            <p class="text-gray-600 mt-1">
+                <i class="fas fa-desktop mr-1"></i>{{ current_user.workstation or "Не назначено" }}
+            </p>
+        </div>
+        <div class="flex items-center space-x-4">
+            <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                {{ current_user.role }}
+            </span>
+        </div>
+    </div>
+</div>
+
+<div class="p-6 bg-white">
+    <!-- Statistics Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {% if show_inventory %}
+        <div class="bg-white rounded-lg shadow p-6 card-hover">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-600">Всего товаров</p>
+                    <p class="text-2xl font-bold text-gray-900 mt-1">{{ stats.total_items }}</p>
+                </div>
+                <i class="fas fa-boxes text-3xl text-blue-600"></i>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6 card-hover">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-600">Мало на складе</p>
+                    <p class="text-2xl font-bold text-red-600 mt-1">{{ stats.low_stock_count }}</p>
+                </div>
+                <i class="fas fa-exclamation-triangle text-3xl text-red-600"></i>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if show_transactions %}
+        <div class="bg-white rounded-lg shadow p-6 card-hover">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-600">Операций сегодня</p>
+                    <p class="text-2xl font-bold text-gray-900 mt-1">{{ stats.today_transactions }}</p>
+                </div>
+                <i class="fas fa-exchange-alt text-3xl text-green-600"></i>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if show_users %}
+        <div class="bg-white rounded-lg shadow p-6 card-hover">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-600">Пользователей</p>
+                    <p class="text-2xl font-bold text-gray-900 mt-1">{{ stats.total_users }}</p>
+                </div>
+                <i class="fas fa-users text-3xl text-purple-600"></i>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Navigation Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Склад -->
+        {% if show_inventory %}
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-warehouse mr-2 text-blue-600"></i>Склад
+            </h3>
+            <div class="space-y-2">
+                <a href="/items" class="block px-4 py-2 bg-gray-50 rounded hover:bg-blue-50 hover:text-blue-600 text-blue-400 text-gray-700 transition">
+                    <i class="fas fa-boxes mr-2"></i>Инструменты
+                </a>
+                {% if show_transactions %}
+                <a href="/transactions" class="block px-4 py-2 bg-gray-50 rounded hover:bg-blue-50 hover:text-blue-600 text-blue-400 text-gray-700 transition">
+                    <i class="fas fa-exchange-alt mr-2"></i>Операции
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Производство -->
+        {% if show_production_section %}
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-industry mr-2 text-green-600"></i>Производство
+            </h3>
+            <div class="space-y-2">
+                {% if show_details %}
+                <a href="/details" class="block px-4 py-2 bg-gray-50 rounded hover:bg-blue-50 hover:text-blue-600 text-blue-400 text-gray-700 transition">
+                    <i class="fas fa-cogs mr-2"></i>Детали
+                </a>
+                {% endif %}
+                {% if show_routes %}
+                <a href="/routes" class="block px-4 py-2 bg-gray-50 rounded hover:bg-blue-50 hover:text-blue-600 text-blue-400 text-gray-700 transition">
+                    <i class="fas fa-route mr-2"></i>Маршруты
+                </a>
+                {% endif %}
+                {% if can_materials %}
+                <a href="/materials" class="block px-4 py-2 bg-gray-50 rounded hover:bg-blue-50 hover:text-blue-600 text-blue-400 text-gray-700 transition">
+                    <i class="fas fa-boxes mr-2"></i>Материалы
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Планирование -->
+        {% if show_planning %}
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-calendar mr-2 text-purple-600"></i>Планирование
+            </h3>
+            <div class="space-y-2">
+                {# План - показываем если есть доступ #}
+                {% if show_planning %}
+                <a href="/planning/plan" class="block px-4 py-2 bg-gray-50 rounded hover:bg-blue-50 hover:text-blue-600 text-blue-400 text-gray-700 transition">
+                    <i class="fas fa-tasks mr-2"></i>План
+                </a>
+                {% endif %}
+                
+                {# Календарь - отдельная проверка #}
+                {% if show_calendar %}
+                <a href="/planning/calendar" class="block px-4 py-2 bg-gray-50 rounded hover:bg-blue-50 hover:text-blue-600 text-blue-400 text-gray-700 transition">
+                    <i class="fas fa-calendar-alt mr-2"></i>Календарь
+                </a>
+                {% endif %}
+                
+                {# Ганта - используем can_gantt #}
+                {% if show_gantt %}
+                <a href="/planning/gantt" class="block px-4 py-2 bg-gray-50 rounded hover:bg-blue-50 hover:text-blue-600 text-blue-400 text-gray-700 transition">
+                    <i class="fas fa-chart-bar mr-2"></i>Диаграмма Ганта
+                </a>
+                {% endif %}
+                
+                {# Настройки планирования - только для admin #}
+                {% if show_settings %}
+                <a href="/planning/settings" class="block px-4 py-2 bg-gray-50 rounded hover:bg-blue-50 hover:text-blue-600 text-blue-400 text-gray-700 transition">
+                    <i class="fas fa-cogs mr-2"></i>Настройки плана
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Оборудование -->
+        {% if show_equipment %}
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-tools mr-2 text-orange-600"></i>Оборудование
+            </h3>
+            <div class="space-y-2">
+                <a href="/equipment" class="block px-4 py-2 bg-gray-50 rounded hover:bg-blue-50 hover:text-blue-600 text-blue-400 text-gray-700 transition">
+                    <i class="fas fa-wrench mr-2"></i>Список оборудования
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Администрирование -->
+        {% if show_users or show_reports or show_import_export %}
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-shield-alt mr-2 text-red-600"></i>Администрирование
+            </h3>
+            <div class="space-y-2">
+                {% if show_users %}
+                <a href="/users" class="block px-4 py-2 bg-gray-50 rounded hover:bg-blue-50 hover:text-blue-600 text-blue-400 text-gray-700 transition">
+                    <i class="fas fa-users mr-2"></i>Пользователи
+                </a>
+                {% endif %}
+                {% if show_reports %}
+                <a href="/reports" class="block px-4 py-2 bg-gray-50 rounded hover:bg-blue-50 hover:text-blue-600 text-blue-400 text-gray-700 transition">
+                    <i class="fas fa-chart-bar mr-2"></i>Отчёты
+                </a>
+                {% endif %}
+                {% if show_import_export %}
+                <a href="/import-excel" class="block px-4 py-2 bg-gray-50 rounded hover:bg-blue-50 hover:text-blue-600 text-blue-400 text-gray-700 transition">
+                    <i class="fas fa-file-excel mr-2"></i>Импорт/Экспорт
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Моя страница -->
+        {% if show_my_page or show_workshop_inventory %}
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-user mr-2 text-indigo-600"></i>Личное
+            </h3>
+            <div class="space-y-2">
+                {% if show_my_page %}
+                <a href="/my-page" class="block px-4 py-2 bg-gray-50 rounded hover:bg-blue-50 hover:text-blue-600 text-blue-400 text-gray-700 transition">
+                    <i class="fas fa-id-card mr-2"></i>Моя страница
+                </a>
+                {% endif %}
+                {% if show_workshop_inventory %}
+                <a href="/equipment/workshop" class="block px-4 py-2 bg-gray-50 rounded hover:bg-blue-50 hover:text-blue-600 text-blue-400 text-gray-700 transition">
+                    <i class="fas fa-tools mr-2"></i>Инвентарь цеха
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

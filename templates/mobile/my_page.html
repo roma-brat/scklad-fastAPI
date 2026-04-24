@@ -1,0 +1,435 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}Моя страница — Склад{% endblock %}
+
+{% block content %}
+<div class="my-page">
+    <!-- Header -->
+    <div class="header">
+        <h1>🔧 Моя страница</h1>
+        <div class="user-info">
+            <span>{{ user.username }}</span>
+            {% if user.workstation or user.workstations %}
+            <div class="user-workstations">
+                <small>📍 Ваши станки:</small>
+                <div class="workstation-tags">
+                    {% if user.workstation %}
+                    <span class="ws-tag">{{ user.workstation }}</span>
+                    {% endif %}
+                    {% if user.workstations %}
+                        {% if user.workstations is string %}
+                            {% if '[' in user.workstations %}
+                                {% set ws_clean = user.workstations.replace('[', '').replace(']', '').replace('"', '').replace("'", '') %}
+                                {% for ws in ws_clean.split(',') %}
+                                    {% if ws.strip() %}
+                                    <span class="ws-tag">{{ ws.strip() }}</span>
+                                    {% endif %}
+                                {% endfor %}
+                            {% else %}
+                                <span class="ws-tag">{{ user.workstations }}</span>
+                            {% endif %}
+                        {% elif user.workstations is iterable and user.workstations is not string %}
+                            {% for ws in user.workstations %}
+                                <span class="ws-tag">{{ ws }}</span>
+                            {% endfor %}
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            {% if user.role == 'admin' %}
+            <a href="/dashboard" class="btn-desktop">🖥 Десктоп версия</a>
+            {% endif %}
+            <form method="POST" action="/api/auth/logout" style="display:inline">
+                <button type="submit" class="btn-logout">Выйти</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="tab-tools">
+        <!-- Search -->
+        <div class="search-section">
+            <input
+                type="text"
+                id="search-input"
+                placeholder="🔍 Поиск по коду или названию"
+                oninput="debounceSearch(this.value)"
+            >
+
+
+        </div>
+
+        <!-- Search Results -->
+        <div id="search-results" class="results-container" style="display:none"></div>
+
+        <!-- Item Card (shown after search/take) -->
+        <div id="item-card" class="item-card" style="display:none"></div>
+
+        <!-- Workshop Inventory -->
+        <div class="section">
+            <h2>🏭 Склад станков</h2>
+            <div id="workshop-inventory" class="card-list"></div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-tasks" style="display:none">
+        <!-- Мои задачи в работе -->
+        <div class="section">
+            <h2>⚡ Мои задачи в работе</h2>
+            <div id="my-in-progress-tasks" class="card-list">
+                <p class="empty-state">Загрузка...</p>
+            </div>
+        </div>
+
+        <!-- Period Toggle -->
+        <div class="period-toggle">
+            <button class="period-btn active" data-period="today" onclick="switchPeriod('today')">Сегодня</button>
+            <button class="period-btn" data-period="week" onclick="switchPeriod('week')">Неделя</button>
+        </div>
+
+        <!-- Tasks List -->
+        <div id="tasks-list" class="card-list"></div>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav">
+        <button class="nav-btn active" onclick="switchTab('tools')">
+            <span class="nav-icon">🔧</span>
+            <span class="nav-label">Инструменты</span>
+        </button>
+        <button class="nav-btn" onclick="switchTab('tasks')">
+            <span class="nav-icon">📋</span>
+            <span class="nav-label">Задачи</span>
+        </button>
+    </div>
+</div>
+
+<!-- Dialog Overlay -->
+<div id="dialog-overlay" class="dialog-overlay" style="display:none">
+    <div id="dialog-content" class="dialog-content"></div>
+</div>
+
+<!-- Tools Modal -->
+<div id="tools-modal" class="dialog-overlay" style="display:none">
+    <div class="dialog-content">
+        <div class="dialog-header">
+            <h3>🔧 Выбор инструментов</h3>
+            <button class="dialog-close" onclick="closeToolsModal()">✕</button>
+        </div>
+        <div id="tools-list" class="tools-list">
+            <p class="empty">Загрузка...</p>
+        </div>
+        <div class="dialog-footer">
+            <button class="btn-primary" onclick="saveTools()">Сохранить</button>
+            <button class="btn-secondary" onclick="closeToolsModal()">Отмена</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const currentUser = {{ user | tojson }};
+
+// Debug: показываем информацию о пользователе в консоли
+console.log('User workstations:', currentUser.workstation, currentUser.workstations);
+
+// Load data on page load
+document.addEventListener('DOMContentLoaded', () => {
+    loadWorkshopInventory();
+});
+
+// Загрузка задач пользователя в работе
+async function loadMyInProgressTasks() {
+    const container = document.getElementById('my-in-progress-tasks');
+    if (!container) return;
+
+    try {
+        const resp = await fetch('/mobile/api/my-in-progress-tasks');
+
+        if (!resp.ok) {
+            container.innerHTML = '<p class="empty-state">Ошибка загрузки задач</p>';
+            return;
+        }
+
+        const data = await resp.json();
+
+        if (!data.success || !data.tasks || data.tasks.length === 0) {
+            container.innerHTML = '<p class="empty-state">Нет задач в работе</p>';
+            return;
+        }
+
+        const statusBorderColors = {
+            'planned': '#3b82f6',
+            'in_progress': '#f59e0b',
+            'completed': '#22c55e',
+            'delayed': '#ef4444',
+        };
+
+        const html = data.tasks.map(task => {
+            const borderColor = statusBorderColors[task.status] || '#3b82f6';
+            const orderNum = task.order_number || task.order_id || '—';
+            const detailName = task.detail_name || '—';
+            const eqName = task.equipment_name || '—';
+            const opName = task.operation_name || '—';
+
+            // Время в работе
+            let workTime = '';
+            if (task.taken_at) {
+                try {
+                    const start = new Date(task.taken_at);
+                    const now = new Date();
+                    const mins = Math.floor((now - start) / 60000);
+                    const hours = Math.floor(mins / 60);
+                    const days = Math.floor(hours / 24);
+                    if (days > 0) {
+                        workTime = `${days}д ${hours % 24}ч`;
+                    } else if (hours > 0) {
+                        workTime = `${hours}ч ${mins % 60}м`;
+                    } else {
+                        workTime = `${mins}м`;
+                    }
+                } catch(e) {}
+            }
+
+            // Кнопка завершения - только если ОТК одобрил
+            let completeBtn = '';
+            if (task.has_otk_approved) {
+                completeBtn = `<button class="btn-complete-full" onclick="showCompleteDialog(${task.id}, ${task.quantity || 1}, ${task.order_id})">✅ Завершить задачу</button>`;
+            } else if (task.has_first_piece_checked) {
+                completeBtn = `<button class="btn-flag btn-warning" disabled>⏳ Ожидает ОТК</button>`;
+            }
+
+            // Статусы для отображения
+            let badges = '';
+            if (task.has_first_piece_checked) badges += '<span class="badge badge-success">✅ Первая проверена</span> ';
+            if (task.has_otk_approved) badges += '<span class="badge badge-success">✅ ОТК одобрил</span> ';
+            if (task.has_otk_pending && !task.has_otk_approved) badges += '<span class="badge badge-warning">⏳ На ОТК</span> ';
+
+            return `
+                <div class="card" style="border-left: 4px solid ${borderColor};" data-order-id="${task.order_id}" data-schedule-id="${task.id}">
+                    <div class="card-header">
+                        <span class="card-title">${detailName}</span>
+                        <span class="card-badge" style="background:${borderColor}">В работе</span>
+                    </div>
+                    <div class="card-body">
+                        ${badges ? `<div style="margin-bottom:8px">${badges}</div>` : ''}
+                        <div class="card-info">
+                            <span>📦 ${orderNum}</span>
+                            <span>🔧 ${eqName}</span>
+                            <span>⚙️ ${opName}</span>
+                        </div>
+                        ${workTime ? `<div class="card-time">⏱ В работе: ${workTime}</div>` : ''}
+                        <div class="card-qty">Кол-во: ${task.quantity || 1} шт</div>
+                    </div>
+                    <div class="card-actions">
+                        ${completeBtn}
+                        <button class="btn-action" onclick="openToolsModal(${task.order_id})">🔧 Инструменты</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = html;
+
+    } catch(err) {
+        console.error('Error loading my tasks:', err);
+        container.innerHTML = '<p class="empty-state">Ошибка загрузки задач</p>';
+    }
+}
+
+// Tab switching
+function switchTab(tab) {
+    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+
+    if (tab === 'tools') {
+        document.getElementById('tab-tools').style.display = 'block';
+        document.querySelectorAll('.nav-btn')[0].classList.add('active');
+    } else if (tab === 'tasks') {
+        document.getElementById('tab-tasks').style.display = 'block';
+        document.querySelectorAll('.nav-btn')[1].classList.add('active');
+        // Загружаем задачи при переключении на вкладку
+        loadMyInProgressTasks();
+        loadTasks('today');
+    } else if (tab === 'work') {
+        document.getElementById('tab-work').style.display = 'block';
+        document.querySelectorAll('.nav-btn')[2].classList.add('active');
+        loadOrdersInWork();
+        loadAvailableOrders();
+    }
+}
+
+// Period switching
+let currentPeriod = 'today';
+function switchPeriod(period) {
+    currentPeriod = period;
+    document.querySelectorAll('.period-btn').forEach(el => el.classList.remove('active'));
+    document.querySelector(`.period-btn[data-period="${period}"]`).classList.add('active');
+    loadTasks(period);
+}
+
+// Диалог завершения задачи (из app.js)
+function showCompleteDialog(scheduleId, quantity, orderId) {
+    const html = `
+        <div class="dialog-header">
+            <h3>✅ Завершение задачи</h3>
+            <button class="dialog-close" onclick="closeCompleteDialog()">✕</button>
+        </div>
+        <div class="dialog-body">
+            <p>Сколько деталей выполнено?</p>
+            <input type="number" id="complete-qty" value="${quantity}" min="0" max="${quantity}" style="width:100%;padding:10px;font-size:16px;border:1px solid #ddd;border-radius:6px;">
+            <p style="font-size:12px;color:#666;margin-top:8px;">Максимум: ${quantity} шт</p>
+        </div>
+        <div class="dialog-footer">
+            <button class="btn-primary" onclick="submitComplete(${scheduleId}, ${orderId})">Подтвердить</button>
+            <button class="btn-secondary" onclick="closeCompleteDialog()">Отмена</button>
+        </div>
+    `;
+    document.getElementById('dialog-content').innerHTML = html;
+    document.getElementById('dialog-overlay').style.display = 'flex';
+}
+
+function closeCompleteDialog() {
+    document.getElementById('dialog-overlay').style.display = 'none';
+}
+
+function submitComplete(scheduleId, orderId) {
+    const qty = parseInt(document.getElementById('complete-qty').value) || 0;
+    if (qty <= 0) {
+        alert('Введите количество');
+        return;
+    }
+
+    fetch('/mobile/api/complete_task', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: `schedule_id=${scheduleId}&actual_quantity=${qty}`
+    })
+    .then(r => r.json())
+    .then(data => {
+        closeCompleteDialog();
+        if (data.success) {
+            alert('Задача завершена!');
+            loadMyInProgressTasks(); // Обновляем список
+        } else {
+            alert(data.message || 'Ошибка');
+        }
+    })
+    .catch(err => {
+        closeCompleteDialog();
+        alert('Ошибка: ' + err);
+    });
+}
+
+// ========== TOOLS MODAL ==========
+let currentOrderId = null;
+
+function openToolsModal(orderId) {
+    currentOrderId = orderId;
+    document.getElementById('tools-modal').style.display = 'flex';
+    loadToolsForTask(orderId);
+}
+
+function closeToolsModal() {
+    document.getElementById('tools-modal').style.display = 'none';
+    currentOrderId = null;
+}
+
+function loadToolsForTask(orderId) {
+    const container = document.getElementById('tools-list');
+    container.innerHTML = '<p class="empty">Загрузка...</p>';
+
+    fetch('/api/order/tools/' + orderId)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success && data.tools) {
+                renderToolsList(data.tools);
+            } else {
+                // Нет инструментов - показываем склад станка
+                loadWorkshopToolsForModal(container);
+            }
+        })
+        .catch(err => {
+            container.innerHTML = '<p class="empty">Ошибка загрузки</p>';
+        });
+}
+
+function loadWorkshopToolsForModal(container) {
+    // Загружаем инструменты со склада станка пользователя
+    const wsContainer = document.getElementById('workshop-inventory');
+    if (wsContainer && wsContainer.innerHTML) {
+        container.innerHTML = wsContainer.innerHTML;
+        // Добавляем чекбоксы
+        container.querySelectorAll('.card').forEach(card => {
+            const itemName = card.querySelector('.card-title')?.textContent || card.textContent;
+            const itemId = card.dataset.itemId || '';
+            const qty = card.querySelector('.card-qty')?.textContent || '1';
+
+            card.innerHTML = `
+                <label class="tool-item">
+                    <input type="checkbox" name="tool" value="${itemId}" data-name="${itemName}" data-qty="${qty}">
+                    <span class="tool-name">${itemName}</span>
+                    <span class="tool-qty">${qty}</span>
+                </label>
+            `;
+        });
+    } else {
+        container.innerHTML = '<p class="empty">Склад станка пуст</p>';
+    }
+}
+
+function renderToolsList(tools) {
+    const container = document.getElementById('tools-list');
+    if (!tools || !tools.length) {
+        container.innerHTML = '<p class="empty">Инструменты не выбраны</p>';
+        return;
+    }
+    container.innerHTML = tools.map(t => `
+        <label class="tool-item">
+            <input type="checkbox" name="tool" value="${t.item_id || t.item_id}" data-name="${t.item_name}" data-qty="${t.quantity}" checked>
+            <span class="tool-name">${t.item_name}</span>
+            <span class="tool-qty">${t.quantity} шт</span>
+        </label>
+    `).join('');
+}
+
+function saveTools() {
+    if (!currentOrderId) return;
+
+    const checkboxes = document.querySelectorAll('#tools-list input[name="tool"]:checked');
+    const tools = Array.from(checkboxes).map(cb => ({
+        item_id: cb.value,
+        item_name: cb.dataset.name || cb.value,
+        quantity: parseInt(cb.dataset.qty) || 1
+    }));
+
+    fetch('/api/save_order_tools', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'order_id=' + currentOrderId + '&tools_json=' + encodeURIComponent(JSON.stringify(tools))
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            closeToolsModal();
+            // Обновить UI задачи - показать кол-во инструментов
+            const taskEl = document.querySelector('[data-order-id="' + currentOrderId + '"]');
+            if (taskEl) {
+                const btn = taskEl.querySelector('.btn-tools');
+                if (btn) btn.innerHTML = '🔧 Инструменты: ' + (data.tools?.length || tools.length) + ' ед.';
+            }
+            alert('Инструменты сохранены');
+            location.reload();
+        } else {
+            alert(data.message || 'Ошибка сохранения');
+        }
+    })
+    .catch(err => {
+        alert('Ошибка: ' + err);
+    });
+}
+</script>
+{% endblock %}

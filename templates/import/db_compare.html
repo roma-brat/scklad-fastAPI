@@ -1,0 +1,1063 @@
+{% extends "base.html" %}
+
+{% block title %}Сравнительный импорт{% endblock %}
+
+{% block content %}
+<div class="bg-orange-50 border-b border-orange-100 px-4 sm:px-6 py-4">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-orange-700">
+            <i class="fas fa-not-equal mr-2"></i>Сравнительный импорт из Excel
+        </h1>
+        <button onclick="goBack()" id="btn-back" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 hidden">
+            <i class="fas fa-arrow-left mr-2"></i>Назад
+        </button>
+    </div>
+</div>
+
+<div class="p-4 sm:p-6 max-w-6xl mx-auto">
+    <!-- Шаг 1: Загрузка -->
+    <div id="step-upload" class="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">
+            <i class="fas fa-upload mr-2 text-orange-600"></i>Шаг 1: Загрузите Excel файл
+        </h2>
+        <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-orange-500 transition" id="drop-zone">
+            <i class="fas fa-cloud-upload-alt text-5xl text-gray-400 mb-4"></i>
+            <p class="text-gray-600 mb-4">Перетащите Excel файл сюда или нажмите для выбора</p>
+            <input type="file" id="file-input" accept=".xlsx,.xls" class="hidden" onchange="handleFileSelect(event)">
+            <button onclick="document.getElementById('file-input').click()" class="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700">
+                <i class="fas fa-folder-open mr-2"></i>Выбрать файл
+            </button>
+        </div>
+    </div>
+
+    <!-- Шаг 2: Новые таблицы -->
+    <div id="step-new-tables" class="hidden bg-white rounded-lg shadow p-6 mb-6">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">
+            <i class="fas fa-plus-circle mr-2 text-purple-600"></i>Шаг 2: Создание новых таблиц
+        </h2>
+        <div id="new-tables-list"></div>
+        <div class="mt-4 flex gap-3">
+            <button onclick="skipNewTables()" id="btn-skip-new" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
+                <i class="fas fa-forward mr-2"></i>Пропустить создание таблиц
+            </button>
+            <button onclick="createSelectedTables()" id="btn-create-tables" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 hidden">
+                <i class="fas fa-database mr-2"></i>Создать выбранные таблицы
+            </button>
+        </div>
+    </div>
+
+    <!-- Шаг 3: Выбор таблицы -->
+    <div id="step-table" class="hidden bg-white rounded-lg shadow p-6 mb-6">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">
+            <i class="fas fa-table mr-2 text-blue-600"></i>Шаг 3: Выберите таблицу для сравнения
+        </h2>
+        <div id="sheets-list" class="space-y-2"></div>
+    </div>
+
+    <!-- Шаг 4: Результат сравнения -->
+    <div id="step-compare" class="hidden bg-white rounded-lg shadow p-6 mb-6">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">
+            <i class="fas fa-exchange-alt mr-2 text-green-600"></i>Шаг 4: Результат сравнения
+        </h2>
+        <div id="compare-result"></div>
+    </div>
+
+    <!-- Шаг 5: Импорт -->
+    <div id="step-import" class="hidden bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">
+            <i class="fas fa-check-circle mr-2 text-green-600"></i>Шаг 5: Выполнить импорт
+        </h2>
+        <div class="space-y-4">
+            <div class="flex gap-4">
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" id="update-existing" checked class="rounded">
+                    <span>Обновить существующие записи</span>
+                </label>
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" id="insert-new" checked class="rounded">
+                    <span>Добавить новые записи</span>
+                </label>
+            </div>
+            <button onclick="executeImport()" id="btn-execute" class="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                <i class="fas fa-play mr-2"></i>Выполнить импорт
+            </button>
+        </div>
+        <div id="import-result" class="mt-4 hidden"></div>
+    </div>
+
+    <!-- Инфо -->
+    <div class="bg-blue-50 rounded-lg p-5 border border-blue-100">
+        <h3 class="font-bold text-blue-900 mb-3"><i class="fas fa-info-circle mr-2"></i>Как это работает</h3>
+        <ul class="space-y-2 text-sm text-blue-800">
+            <li><i class="fas fa-check mr-2"></i>Загрузите Excel файл с данными</li>
+            <li><i class="fas fa-check mr-2"></i>Если в Excel есть новые листы - система предложит создать таблицы</li>
+            <li><i class="fas fa-check mr-2"></i>Выберите таблицу БД для сравнения (листы Excel = таблицы БД)</li>
+            <li><i class="fas fa-check mr-2"></i>Система сравнит данные и покажет различия</li>
+            <li><i class="fas fa-check mr-2"></i>Выберите: обновить существующие и/или добавить новые</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+console.log('=== DB Compare page loaded ===');
+let currentFileId = null;
+let currentTable = null;
+let currentComparison = null;
+let navigationStack = [];
+let newTables = [];
+let selectedNewTables = new Set();
+
+function goBack() {
+    if (navigationStack.length > 0) {
+        const prev = navigationStack.pop();
+        if (prev === 'table') showTableSelection();
+        else if (prev === 'new-tables') showNewTablesSection();
+        else if (prev === 'upload') showUploadSection();
+    }
+}
+
+function showUploadSection() {
+    document.getElementById('step-upload').classList.remove('hidden');
+    document.getElementById('step-new-tables').classList.add('hidden');
+    document.getElementById('step-table').classList.add('hidden');
+    document.getElementById('step-compare').classList.add('hidden');
+    document.getElementById('step-import').classList.add('hidden');
+    document.getElementById('btn-back').classList.add('hidden');
+}
+
+function showNewTablesSection() {
+    document.getElementById('step-upload').classList.add('hidden');
+    document.getElementById('step-new-tables').classList.remove('hidden');
+    document.getElementById('step-table').classList.add('hidden');
+    document.getElementById('step-compare').classList.add('hidden');
+    document.getElementById('step-import').classList.add('hidden');
+    document.getElementById('btn-back').classList.remove('hidden');
+}
+
+function showTableSelection() {
+    document.getElementById('step-upload').classList.add('hidden');
+    document.getElementById('step-new-tables').classList.add('hidden');
+    document.getElementById('step-table').classList.remove('hidden');
+    document.getElementById('step-compare').classList.add('hidden');
+    document.getElementById('step-import').classList.add('hidden');
+    document.getElementById('btn-back').classList.remove('hidden');
+}
+
+function showComparisonSection() {
+    document.getElementById('step-upload').classList.add('hidden');
+    document.getElementById('step-new-tables').classList.add('hidden');
+    document.getElementById('step-table').classList.add('hidden');
+    document.getElementById('step-compare').classList.remove('hidden');
+    document.getElementById('step-import').classList.remove('hidden');
+    document.getElementById('btn-back').classList.remove('hidden');
+}
+
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    uploadFile(file);
+}
+
+async function uploadFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        console.log('Uploading file:', file.name);
+        const response = await fetch('/import/db-compare/upload', {method: 'POST', body: formData});
+        const result = await response.json();
+        
+        console.log('Upload response status:', response.status);
+        console.log('Upload response:', result);
+
+        if (!response.ok) {
+            alert('Ошибка загрузки: ' + (result.error || 'Неизвестная ошибка'));
+            return;
+        }
+
+        if (!result.file_id || !result.sheets) {
+            alert('Неверный ответ сервера: ' + JSON.stringify(result));
+            return;
+        }
+
+        currentFileId = result.file_id;
+        console.log('File uploaded, file_id:', currentFileId, 'sheets count:', result.sheets.length);
+        
+        // Показываем прогресс
+        const stepUpload = document.getElementById('step-upload');
+        if (stepUpload) {
+            stepUpload.innerHTML = `
+                <div class="text-center py-4">
+                    <i class="fas fa-spinner fa-spin text-3xl text-green-600 mb-4"></i>
+                    <p class="text-gray-600">Файл загружен. Анализируем данные...</p>
+                </div>
+            `;
+        }
+        
+        // Сначала определяем новые таблицы
+        await detectNewTables(result.sheets, result.sheet_info);
+    } catch (e) {
+        console.error('Upload error:', e);
+        alert('Ошибка загрузки: ' + e.message);
+    }
+}
+
+async function detectNewTables(sheets, sheetInfo) {
+    console.log('=== detectNewTables START ===');
+    console.log('sheets:', sheets);
+    console.log('currentFileId:', currentFileId);
+    
+    try {
+        const url = `/import/db-compare/detect-new-tables?file_id=${currentFileId}`;
+        console.log('Fetching URL:', url);
+        
+        const response = await fetch(url);
+        console.log('Response status:', response.status);
+        
+        const result = await response.json();
+        console.log('Response JSON:', result);
+
+        if (!response.ok) {
+            console.error('Error detecting new tables:', result);
+            alert('Ошибка определения таблиц: ' + (result.error || 'Неизвестная ошибка'));
+            return;
+        }
+
+        const newTables = result.new_tables || [];
+        console.log('New tables found:', newTables.length);
+        console.log('Existing tables:', result.existing_tables);
+        
+        // Всегда анализируем все листы (пропускаем выбор новых таблиц)
+        console.log('Skipping new tables selection, calling analyzeAllSheets');
+        navigationStack = ['upload'];
+        await analyzeAllSheets(sheets, sheetInfo);
+        
+        console.log('=== detectNewTables END ===');
+    } catch (e) {
+        console.error('Error detecting new tables:', e);
+        alert('Ошибка: ' + e.message);
+    }
+}
+
+async function analyzeAllSheets(sheets, sheetInfo) {
+    console.log('=== analyzeAllSheets START ===');
+    console.log('sheets:', sheets);
+    console.log('sheetInfo:', sheetInfo);
+    console.log('currentFileId:', currentFileId);
+    
+    showTableSelection();
+
+    const list = document.getElementById('sheets-list');
+    list.innerHTML = '<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-3xl text-orange-600"></i><p class="mt-2 text-gray-600">Анализируем все листы...</p></div>';
+
+    const sheetsWithChanges = [];
+
+    // Анализируем каждый лист
+    for (const sheet of sheets) {
+        console.log('Sending analyze request for sheet:', sheet);
+        try {
+            const formData = new FormData();
+            formData.append('file_id', currentFileId);
+            formData.append('table_name', sheet);
+
+            const response = await fetch('/import/db-compare/analyze', {method: 'POST', body: formData});
+            console.log('Analyze response status:', response.status);
+            
+            if (!response.ok) {
+                console.error('Analyze error for', sheet, ':', response.status);
+                const errText = await response.text();
+                console.error('Error body:', errText);
+                continue;
+            }
+            
+            const result = await response.json();
+            console.log('Analyze result for', sheet, ':', JSON.stringify(result));
+
+            if (result.comparison) {
+                const updated = result.comparison.updated || 0;
+                const new_items = result.comparison.new_items || 0;
+                console.log('Sheet', sheet, ': updated=', updated, 'new_items=', new_items);
+                
+                if (updated > 0 || new_items > 0) {
+                    sheetsWithChanges.push({
+                        name: sheet,
+                        info: sheetInfo[sheet],
+                        comparison: result.comparison
+                    });
+                }
+            }
+        } catch (e) {
+            console.error(`Error analyzing ${sheet}:`, e);
+        }
+    }
+    
+    console.log('=== analyzeAllSheets END ===');
+    console.log('sheetsWithChanges:', sheetsWithChanges.length);
+
+    if (sheetsWithChanges.length === 0) {
+        list.innerHTML = `
+            <div class="text-center py-12 bg-green-50 rounded-lg">
+                <i class="fas fa-check-circle text-5xl text-green-600 mb-4"></i>
+                <h3 class="font-bold text-green-900 text-lg mb-2">Изменений не найдено</h3>
+                <p class="text-gray-600">Все данные в Excel совпадают с базой данных</p>
+            </div>
+        `;
+        return;
+    }
+
+    list.innerHTML = `<div class="mb-4 text-sm text-gray-600"><i class="fas fa-info-circle mr-1"></i>Найдено <strong class="text-orange-600">${sheetsWithChanges.length}</strong> ${sheetsWithChanges.length === 1 ? 'лист с изменениями' : (sheetsWithChanges.length < 5 ? 'листа с изменениями' : 'листов с изменениями')} из ${sheets.length}</div>`;
+
+    sheetsWithChanges.forEach((sheetData) => {
+        const {name, info, comparison} = sheetData;
+        const btn = document.createElement('button');
+        btn.className = 'w-full p-4 bg-white border-2 border-orange-200 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition text-left mb-3';
+        
+        const changesCount = (comparison.updated || 0) + (comparison.new_items || 0);
+        
+        btn.innerHTML = `
+            <div class="flex items-center justify-between mb-2">
+                <div class="font-bold text-gray-900">${name}</div>
+                <span class="px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-bold">${changesCount} изменений</span>
+            </div>
+            <div class="text-sm text-gray-500 mb-2">${info.rows} строк, ${info.cols.length} колонок</div>
+            <div class="flex gap-3 text-xs">
+                ${comparison.updated > 0 ? `<span class="text-yellow-700"><i class="fas fa-edit mr-1"></i>${comparison.updated} обновлений</span>` : ''}
+                ${comparison.new_items > 0 ? `<span class="text-purple-700"><i class="fas fa-plus mr-1"></i>${comparison.new_items} новых</span>` : ''}
+            </div>
+        `;
+        btn.onclick = () => {
+            currentTable = name;
+            currentComparison = comparison;
+            navigationStack.push('table');
+            showComparisonSection();
+            showComparison(comparison);
+        };
+        list.appendChild(btn);
+    });
+}
+
+async function detectNewTables(sheets, sheetInfo) {
+    try {
+        console.log('Detecting new tables for file_id:', currentFileId);
+        const response = await fetch(`/import/db-compare/detect-new-tables?file_id=${currentFileId}`);
+        const result = await response.json();
+        
+        console.log('Detect new tables response:', response.status, result);
+
+        if (!response.ok) {
+            console.error('Error detecting new tables:', result);
+            alert('Ошибка определения таблиц: ' + (result.error || 'Неизвестная ошибка'));
+            return;
+        }
+
+newTables = result.new_tables || [];
+        console.log('New tables found:', newTables.length);
+        console.log('Existing tables:', result.existing_tables);
+        
+        if (newTables.length > 0) {
+            // Показываем секцию с новыми таблицами
+            console.log('Showing new tables section');
+            navigationStack = ['upload'];
+            showNewTablesSection();
+            renderNewTablesList(result.sheet_info || sheetInfo);
+        } else {
+            // Нет новых таблиц - сразу к анализу
+            console.log('No new tables, calling analyzeAllSheets');
+            navigationStack = ['upload'];
+            await analyzeAllSheets(sheets, sheetInfo);
+        }
+    } catch (e) {
+        console.error('Error detecting new tables:', e);
+        alert('Ошибка: ' + e.message);
+    }
+}
+
+function renderNewTablesList(sheetInfo) {
+    const container = document.getElementById('new-tables-list');
+    const btnCreate = document.getElementById('btn-create-tables');
+    
+    if (newTables.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-8 text-gray-500">
+                <i class="fas fa-check-circle text-3xl text-green-600 mb-3"></i>
+                <p>Все листы соответствуют существующим таблицам</p>
+            </div>
+        `;
+        return;
+    }
+
+    btnCreate.classList.remove('hidden');
+    
+    let html = `
+        <div class="mb-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+            <p class="text-purple-800">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                Найдено <strong>${newTables.length}</strong> листов Excel без соответствующих таблиц в БД.
+                Выберите какие ��аблицы создать:
+            </p>
+        </div>
+        <div class="space-y-3">
+    `;
+    
+    newTables.forEach((table) => {
+        const info = sheetInfo[table.sheet_name] || {};
+        const rowCount = info.rows || table.rows || 0;
+        const colCount = info.cols?.length || table.columns_count || 0;
+        
+        html += `
+            <div class="border-2 border-purple-200 rounded-lg p-4 bg-white hover:border-purple-500 transition">
+                <label class="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox" class="new-table-checkbox mt-1 rounded" data-sheet="${table.sheet_name}" data-table="${table.table_name}" onchange="toggleNewTable(this)">
+                    <div class="flex-1">
+                        <div class="font-bold text-gray-900">${table.table_name}</div>
+                        <div class="text-sm text-gray-500 mt-1">
+                            <span class="mr-3"><i class="fas fa-rows mr-1"></i>${rowCount} строк</span>
+                            <span><i class="fas fa-columns mr-1"></i>${colCount} колонок</span>
+                        </div>
+                        <div class="text-xs text-gray-400 mt-2">
+                            Колонки: ${table.columns.slice(0, 5).join(', ')}${table.columns.length > 5 ? '...' : ''}
+                        </div>
+                    </div>
+                </label>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function toggleNewTable(checkbox) {
+    const sheetName = checkbox.dataset.sheet;
+    const tableName = checkbox.dataset.table;
+    
+    if (checkbox.checked) {
+        selectedNewTables.add(sheetName);
+    } else {
+        selectedNewTables.delete(sheetName);
+    }
+    
+    // Обновляем кнопку создания
+    const btnCreate = document.getElementById('btn-create-tables');
+    if (selectedNewTables.size > 0) {
+        btnCreate.textContent = `Создать ${selectedNewTables.size} таблиц${selectedNewTables.size > 1 ? 'ы' : 'у'}`;
+        btnCreate.classList.remove('hidden');
+    } else {
+        btnCreate.classList.add('hidden');
+    }
+}
+
+async function skipNewTables() {
+    // Продолжаем без создания таблиц - анализируем все листы
+    navigationStack.push('new-tables');
+    
+    // Получаем данные о листах из upload ответа
+    // sheets и sheet_info уже хранятся в currentFileId
+    // Просто вызываем analyzeAllSheets с данными которые были в upload
+    const sheets = [];
+    const sheetInfo = {};
+    
+    // Запрашиваем информацию у сервера
+    try {
+        const response = await fetch(`/import/db-compare/detect-new-tables?file_id=${currentFileId}`);
+        const result = await response.json();
+        
+        if (response.ok && result.sheet_info) {
+            const sheetsList = Object.keys(result.sheet_info);
+            await analyzeAllSheets(sheetsList, result.sheet_info);
+        }
+    } catch (e) {
+        console.error('Error:', e);
+        alert('Ошибка: ' + e.message);
+    }
+}
+
+async function createSelectedTables() {
+    if (selectedNewTables.size === 0) return;
+    
+    const btnCreate = document.getElementById('btn-create-tables');
+    btnCreate.disabled = true;
+    btnCreate.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Создание таблиц...';
+    
+    const createdTables = [];
+    const errors = [];
+    
+    for (const sheetName of selectedNewTables) {
+        const tableInfo = newTables.find(t => t.sheet_name === sheetName);
+        if (!tableInfo) continue;
+        
+        try {
+            const formData = new FormData();
+            formData.append('file_id', currentFileId);
+            formData.append('sheet_name', sheetName);
+            formData.append('table_name', tableInfo.table_name);
+            
+            const response = await fetch('/import/db-compare/create-table', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            
+            if (response.ok && result.success) {
+                createdTables.push(tableInfo.table_name);
+            } else {
+                errors.push(`${tableInfo.table_name}: ${result.error || 'Ошибка создания'}`);
+            }
+        } catch (e) {
+            errors.push(`${tableInfo.table_name}: ${e.message}`);
+        }
+    }
+    
+    btnCreate.disabled = false;
+    btnCreate.innerHTML = '<i class="fas fa-database mr-2"></i>Создать выбранные таблицы';
+    
+    if (errors.length > 0) {
+        alert('Ошибки при создании таблиц:\n' + errors.join('\n'));
+    }
+    
+    if (createdTables.length > 0) {
+        // Продолжаем к анализу - используем текущий file_id
+        navigationStack.push('new-tables');
+        await analyzeAllSheetsAfterCreate();
+    }
+}
+
+async function analyzeAllSheetsAfterCreate() {
+    // Просто повторно анализируем с тем же file_id - таблица уже создана в БД
+    // Заново определяем новые таблицы (созданные уже не будут новыми)
+    await detectNewTablesForAnalysis();
+}
+
+async function detectNewTablesForAnalysis() {
+    try {
+        const response = await fetch(`/import/db-compare/detect-new-tables?file_id=${currentFileId}`);
+        const result = await response.json();
+
+        if (!response.ok) {
+            console.error('Error detecting tables:', result.error);
+            // Просто анализируем все листы
+            await analyzeAllSheetsWithCurrentFileId();
+            return;
+        }
+
+        // Переопределяем newTables - после создания их должно быть меньше или 0
+        newTables = result.new_tables || [];
+        
+        // Если еще есть новые таблицы - показываем их
+        if (newTables.length > 0) {
+            showNewTablesSection();
+            renderNewTablesList(result.sheet_info || {});
+        } else {
+            // Все новые таблицы созданы - анализируем с текущим file_id
+            await analyzeAllSheetsWithCurrentFileId();
+        }
+    } catch (e) {
+        console.error('Error:', e);
+        await analyzeAllSheetsWithCurrentFileId();
+    }
+}
+
+async function analyzeAllSheetsWithCurrentFileId() {
+    // Получаем информацию о листах из текущего file_id
+    // Вызываем upload только для получения sheet info (без создания новой сессии)
+    // Или лучше - читаем из уже загруженных данных
+    
+    // Используем уже загруженный файл - просто вызываем detect для получения списка таблиц
+    try {
+        const response = await fetch(`/import/db-compare/detect-new-tables?file_id=${currentFileId}`);
+        const result = await response.json();
+        
+        if (response.ok) {
+            const sheets = Object.keys(result.sheet_info || {});
+            if (sheets.length > 0) {
+                // Преобразуем формат для analyzeAllSheets
+                const sheetInfo = {};
+                sheets.forEach(name => {
+                    // Пытаемся получить данные о листе
+                    sheetInfo[name] = { rows: 0, cols: [] };
+                });
+                await analyzeAllSheetsFromApi(sheets);
+            }
+        }
+    } catch (e) {
+        console.error('Error:', e);
+    }
+}
+
+async function analyzeAllSheetsFromApi(sheets) {
+    showTableSelection();
+
+    const list = document.getElementById('sheets-list');
+    list.innerHTML = '<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-3xl text-orange-600"></i><p class="mt-2 text-gray-600">Анализируем все листы...</p></div>';
+
+    const sheetsWithChanges = [];
+
+    // Анализируем каждый лист
+    for (const sheet of sheets) {
+        try {
+            const formData = new FormData();
+            formData.append('file_id', currentFileId);
+            formData.append('table_name', sheet);
+
+            const response = await fetch('/import/db-compare/analyze', {method: 'POST', body: formData});
+            const result = await response.json();
+
+            if (response.ok && result.comparison) {
+                const hasChanges = (result.comparison.updated || 0) > 0 || (result.comparison.new_items || 0) > 0;
+                if (hasChanges) {
+                    sheetsWithChanges.push({
+                        name: sheet,
+                        info: { rows: result.comparison.total_excel || 0, cols: result.comparison.columns_excel || [] },
+                        comparison: result.comparison
+                    });
+                }
+            }
+        } catch (e) {
+            console.error(`Error analyzing ${sheet}:`, e);
+        }
+    }
+
+    // Показываем только листы с изменениями
+    if (sheetsWithChanges.length === 0) {
+        list.innerHTML = `
+            <div class="text-center py-12 bg-green-50 rounded-lg">
+                <i class="fas fa-check-circle text-5xl text-green-600 mb-4"></i>
+                <h3 class="font-bold text-green-900 text-lg mb-2">Изменений не найдено</h3>
+                <p class="text-gray-600">Все данные в Excel совпадают с базой данных</p>
+            </div>
+        `;
+        return;
+    }
+
+    list.innerHTML = `<div class="mb-4 text-sm text-gray-600"><i class="fas fa-info-circle mr-1"></i>Найдено <strong class="text-orange-600">${sheetsWithChanges.length}</strong> ${sheetsWithChanges.length === 1 ? 'лист с изменениями' : (sheetsWithChanges.length < 5 ? 'листа с изменениями' : 'листов с изменениями')} из ${sheets.length}</div>`;
+
+    sheetsWithChanges.forEach((sheetData) => {
+        const {name, info, comparison} = sheetData;
+        const btn = document.createElement('button');
+        btn.className = 'w-full p-4 bg-white border-2 border-orange-200 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition text-left mb-3';
+        
+        const changesCount = (comparison.updated || 0) + (comparison.new_items || 0);
+        
+        btn.innerHTML = `
+            <div class="flex items-center justify-between mb-2">
+                <div class="font-bold text-gray-900">${name}</div>
+                <span class="px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-bold">${changesCount} изменений</span>
+            </div>
+            <div class="text-sm text-gray-500 mb-2">${info.rows} строк, ${info.cols.length} колонок</div>
+            <div class="flex gap-3 text-xs">
+                ${comparison.updated > 0 ? `<span class="text-yellow-700"><i class="fas fa-edit mr-1"></i>${comparison.updated} обновлений</span>` : ''}
+                ${comparison.new_items > 0 ? `<span class="text-purple-700"><i class="fas fa-plus mr-1"></i>${comparison.new_items} новых</span>` : ''}
+            </div>
+        `;
+        btn.onclick = () => {
+            currentTable = name;
+            currentComparison = comparison;
+            navigationStack.push('table');
+            showComparisonSection();
+            showComparison(comparison);
+        };
+        list.appendChild(btn);
+    });
+}
+
+async function analyzeAllSheets(sheets, sheetInfo) {
+    showTableSelection();
+
+    const list = document.getElementById('sheets-list');
+    list.innerHTML = '<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-3xl text-orange-600"></i><p class="mt-2 text-gray-600">Анализируем все листы...</p></div>';
+
+    const sheetsWithChanges = [];
+
+    // Анализируем каждый лист
+    for (const sheet of sheets) {
+        console.log('Sending analyze request for sheet:', sheet);
+        try {
+            const formData = new FormData();
+            formData.append('file_id', currentFileId);
+            formData.append('table_name', sheet);
+
+            const response = await fetch('/import/db-compare/analyze', {method: 'POST', body: formData});
+            console.log('Analyze response status:', response.status);
+            
+            if (!response.ok) {
+                console.error('Analyze error for', sheet, ':', response.status);
+                const errText = await response.text();
+                console.error('Error body:', errText);
+                continue;
+            }
+            
+            const result = await response.json();
+            console.log('Analyze result for', sheet, ':', JSON.stringify(result));
+
+            if (result.comparison) {
+                const hasChanges = (result.comparison.updated || 0) > 0 || (result.comparison.new_items || 0) > 0;
+                if (hasChanges) {
+                    sheetsWithChanges.push({
+                        name: sheet,
+                        info: sheetInfo[sheet],
+                        comparison: result.comparison
+                    });
+                }
+            }
+        } catch (e) {
+            console.error(`Error analyzing ${sheet}:`, e);
+        }
+    }
+
+    console.log('=== analyzeAllSheets END ===');
+    console.log('sheetsWithChanges:', sheetsWithChanges.length);
+
+    list.innerHTML = `<div class="mb-4 text-sm text-gray-600"><i class="fas fa-info-circle mr-1"></i>Найдено <strong class="text-orange-600">${sheetsWithChanges.length}</strong> ${sheetsWithChanges.length === 1 ? 'лист с изменениями' : (sheetsWithChanges.length < 5 ? 'листа с изменениями' : 'листов с изменениями')} из ${sheets.length}</div>`;
+
+    sheetsWithChanges.forEach((sheetData) => {
+        const {name, info, comparison} = sheetData;
+        const btn = document.createElement('button');
+        btn.className = 'w-full p-4 bg-white border-2 border-orange-200 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition text-left mb-3';
+        
+        const changesCount = (comparison.updated || 0) + (comparison.new_items || 0);
+        
+        btn.innerHTML = `
+            <div class="flex items-center justify-between mb-2">
+                <div class="font-bold text-gray-900">${name}</div>
+                <span class="px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-bold">${changesCount} изменений</span>
+            </div>
+            <div class="text-sm text-gray-500 mb-2">${info.rows} строк, ${info.cols.length} колонок</div>
+            <div class="flex gap-3 text-xs">
+                ${comparison.updated > 0 ? `<span class="text-yellow-700"><i class="fas fa-edit mr-1"></i>${comparison.updated} обновлений</span>` : ''}
+                ${comparison.new_items > 0 ? `<span class="text-purple-700"><i class="fas fa-plus mr-1"></i>${comparison.new_items} новых</span>` : ''}
+            </div>
+        `;
+        btn.onclick = () => {
+            currentTable = name;
+            currentComparison = comparison;
+            navigationStack.push('table');
+            showComparisonSection();
+            showComparison(comparison);
+        };
+        list.appendChild(btn);
+    });
+}
+
+async function analyzeTable(tableName) {
+    currentTable = tableName;
+
+    try {
+        const formData = new FormData();
+        formData.append('file_id', currentFileId);
+        formData.append('table_name', tableName);
+
+        const response = await fetch('/import/db-compare/analyze', {method: 'POST', body: formData});
+        const result = await response.json();
+
+        if (!response.ok) {
+            alert('Ошибка анализа: ' + (result.error || 'Неизвестная ошибка'));
+            return;
+        }
+
+        showComparison(result.comparison);
+    } catch (e) {
+        alert('Ошибка: ' + e.message);
+    }
+}
+
+function showComparison(data) {
+    currentComparison = data;
+    navigationStack.push('table');
+    showComparisonSection();
+
+    const container = document.getElementById('compare-result');
+    
+    // Сводка
+    let html = `
+        <div class="grid grid-cols-4 gap-4 mb-6">
+            <div class="p-4 bg-blue-50 rounded-lg text-center">
+                <div class="text-3xl font-bold text-blue-700">${data.total_excel || 0}</div>
+                <div class="text-sm text-blue-600">В Excel</div>
+            </div>
+            <div class="p-4 bg-green-50 rounded-lg text-center">
+                <div class="text-3xl font-bold text-green-700">${data.unchanged || 0}</div>
+                <div class="text-sm text-green-600">Без изменений</div>
+            </div>
+            <div class="p-4 bg-yellow-50 rounded-lg text-center cursor-pointer hover:bg-yellow-100" onclick="toggleDetails('changes-details')">
+                <div class="text-3xl font-bold text-yellow-700">${data.updated || 0}</div>
+                <div class="text-sm text-yellow-600">К обновлению ⬇️</div>
+            </div>
+            <div class="p-4 bg-purple-50 rounded-lg text-center cursor-pointer hover:bg-purple-100" onclick="toggleDetails('new-details')">
+                <div class="text-3xl font-bold text-purple-700">${data.new_items || 0}</div>
+                <div class="text-sm text-purple-600">Новые ➕</div>
+            </div>
+        </div>
+        
+        <!-- Кнопки выбора -->
+        <div class="mb-4 flex gap-3 items-center bg-gray-100 p-3 rounded-lg">
+            <button onclick="selectAllChanges()" class="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600">
+                <i class="fas fa-check-square mr-1"></i>Выбрать все
+            </button>
+            <button onclick="deselectAllChanges()" class="px-3 py-1 bg-gray-400 text-white rounded text-sm hover:bg-gray-500">
+                <i class="fas fa-square mr-1"></i>Снять все
+            </button>
+            <div class="flex-1"></div>
+            <span class="text-sm text-gray-600" id="selected-count">Выбрано: 0</span>
+        </div>
+    `;
+
+    // Детали изменений - РАСКРЫТЫ ПО УМОЛЧАНИЮ
+    html += `<div id="changes-details" class="mb-6">`;
+    
+    // Обновляемые записи
+    if (data.changes && data.changes.length > 0) {
+        html += `<div class="mb-4"><h3 class="font-bold text-yellow-900 mb-3 flex items-center cursor-pointer" onclick="toggleDetails('changes-list')">
+            <i class="fas fa-chevron-down mr-2 text-xs" id="changes-list-icon"></i>
+            Записи для обновления (${data.changes.length})
+        </h3>`;
+        html += `<div id="changes-list" class="space-y-3">`;
+        data.changes.slice(0, 100).forEach((change, idx) => {
+            html += `<div class="border border-yellow-200 rounded-lg p-4 bg-yellow-50">`;
+            html += `<label class="flex items-start gap-3 cursor-pointer">`;
+            html += `<input type="checkbox" class="change-checkbox mt-1 rounded" data-idx="${idx}" onchange="updateSelectedCount()">`;
+            html += `<div class="flex-1">`;
+            html += `<div class="font-bold text-sm mb-2">ID: ${change.id || 'N/A'}</div>`;
+            if (change.fields) {
+                html += `<table class="w-full text-sm"><thead><tr class="text-left text-gray-500"><th class="w-1/4">Поле</th><th class="w-1/3">В БД</th><th class="w-1/3">В Excel</th></tr></thead><tbody>`;
+                Object.entries(change.fields).forEach(([field, vals]) => {
+                    html += `<tr class="border-t border-yellow-100"><td class="py-1 font-mono text-xs">${field}</td><td class="py-1 text-red-600 text-xs">${vals.old || '—'}</td><td class="py-1 text-green-600 text-xs">${vals.new || '—'}</td></tr>`;
+                });
+                html += `</tbody></table>`;
+            }
+            html += `</div></label></div>`;
+        });
+        if (data.changes.length > 100) {
+            html += `<div class="text-center text-sm text-gray-500 p-2 bg-yellow-100 rounded">... и ещё ${data.changes.length - 100} записей (показаны первые 100)</div>`;
+        }
+        html += `</div></div>`;
+    } else if (data.rows_to_update && data.rows_to_update.length > 0) {
+        // Альтернативный формат
+        const rowsToUpdate = data.rows_to_update;
+        html += `<div class="mb-4"><h3 class="font-bold text-yellow-900 mb-3 flex items-center cursor-pointer" onclick="toggleDetails('changes-list')">
+            <i class="fas fa-chevron-down mr-2 text-xs" id="changes-list-icon"></i>
+            Записи для обновления (${rowsToUpdate.length})
+        </h3>`;
+        html += `<div id="changes-list" class="space-y-2">`;
+        rowsToUpdate.slice(0, 100).forEach((row, idx) => {
+            html += `<div class="border border-yellow-200 rounded p-3 bg-yellow-50 flex items-start gap-3">`;
+            html += `<input type="checkbox" class="change-checkbox mt-1 rounded" data-idx="${idx}">`;
+            html += `<div class="flex-1">`;
+            html += `<div class="font-bold">ID: ${row.id || row.row_index + 1}</div>`;
+            html += `</div></div>`;
+        });
+        if (rowsToUpdate.length > 100) {
+            html += `<div class="text-center text-sm text-gray-500 p-2 bg-yellow-100 rounded">... и ещё ${rowsToUpdate.length - 100} записей</div>`;
+        }
+        html += `</div></div>`;
+    } else {
+        html += `<div class="text-center py-4 text-yellow-700 bg-yellow-50 rounded-lg"><i class="fas fa-check mr-2"></i>Нет записей для обновления</div>`;
+    }
+    
+    html += `</div>`; // changes-details
+
+    // Новые записи - РАСКРЫТЫ ПО УМОЛЧАНИЮ
+    html += `<div id="new-details" class="mb-6">`;
+    if (data.new && data.new.length > 0) {
+        html += `<div class="mb-4"><h3 class="font-bold text-purple-900 mb-3 flex items-center cursor-pointer" onclick="toggleDetails('new-list')">
+            <i class="fas fa-chevron-down mr-2 text-xs" id="new-list-icon"></i>
+            Новые записи (${data.new.length})
+        </h3>`;
+        html += `<div class="mb-3 flex gap-2">
+            <button onclick="selectAllNew()" class="px-2 py-1 bg-purple-500 text-white rounded text-xs hover:bg-purple-600">
+                <i class="fas fa-check-square mr-1"></i>Выбрать все новые
+            </button>
+            <button onclick="deselectAllNew()" class="px-2 py-1 bg-gray-400 text-white rounded text-xs hover:bg-gray-500">
+                <i class="fas fa-square mr-1"></i>Снять все
+            </button>
+        </div>`;
+        html += `<div id="new-list" class="overflow-x-auto"><table class="min-w-full divide-y divide-gray-200 text-sm"><thead class="bg-purple-100"><tr><th class="w-10"></th>`;
+        if (data.new.length > 0) {
+            Object.keys(data.new[0]).forEach(col => {
+                html += `<th class="px-3 py-2 text-left text-xs font-semibold text-purple-700">${col}</th>`;
+            });
+        }
+        html += `</tr></thead><tbody class="bg-white divide-y divide-gray-100">`;
+        data.new.slice(0, 100).forEach((row, idx) => {
+            html += `<tr>`;
+            html += `<td><input type="checkbox" class="new-checkbox rounded" data-idx="${idx}"></td>`;
+            Object.values(row).forEach(val => {
+                html += `<td class="px-3 py-2 text-xs">${val || '—'}</td>`;
+            });
+            html += `</tr>`;
+        });
+        html += `</tbody></table>`;
+        if (data.new.length > 100) {
+            html += `<div class="text-center text-sm text-gray-500 mt-2 p-2 bg-purple-50 rounded">... и ещё ${data.new.length - 100} записей (показаны первые 100)</div>`;
+        }
+        html += `</div></div>`;
+    } else if (data.rows_to_add && data.rows_to_add.length > 0) {
+        // Альтернативный формат
+        const rowsToAdd = data.rows_to_add;
+        html += `<div class="mb-4"><h3 class="font-bold text-purple-900 mb-3 flex items-center cursor-pointer" onclick="toggleDetails('new-list')">
+            <i class="fas fa-chevron-down mr-2 text-xs" id="new-list-icon"></i>
+            Новые записи (${rowsToAdd.length})
+        </h3>`;
+        html += `<div class="mb-3 flex gap-2">
+            <button onclick="selectAllNew()" class="px-2 py-1 bg-purple-500 text-white rounded text-xs hover:bg-purple-600">
+                <i class="fas fa-check-square mr-1"></i>Выбрать все новые
+            </button>
+            <button onclick="deselectAllNew()" class="px-2 py-1 bg-gray-400 text-white rounded text-xs hover:bg-gray-500">
+                <i class="fas fa-square mr-1"></i>Снять все
+            </button>
+        </div>`;
+        html += `<div id="new-list" class="space-y-2">`;
+        rowsToAdd.slice(0, 100).forEach((row, idx) => {
+            html += `<div class="border border-purple-200 rounded p-3 bg-purple-50 flex items-start gap-3">`;
+            html += `<input type="checkbox" class="new-checkbox rounded" data-idx="${idx}">`;
+            html += `<div class="flex-1">`;
+            html += `<div class="font-bold">Запись #${idx + 1}</div>`;
+            if (row.data) {
+                Object.entries(row.data).slice(0, 5).forEach(([k, v]) => {
+                    html += `<div class="text-xs text-gray-600">${k}: ${v}</div>`;
+                });
+            }
+            html += `</div></div>`;
+        });
+        if (rowsToAdd.length > 100) {
+            html += `<div class="text-center text-sm text-gray-500 p-2 bg-purple-50 rounded">... и ещё ${rowsToAdd.length - 100} записей</div>`;
+        }
+        html += `</div></div>`;
+    } else {
+        html += `<div class="text-center py-4 text-purple-700 bg-purple-50 rounded-lg"><i class="fas fa-check mr-2"></i>Нет новых записей</div>`;
+    }
+    html += `</div>`; // new-details
+
+    container.innerHTML = html;
+    updateSelectedCount();
+}
+
+function selectAllChanges() {
+    document.querySelectorAll('.change-checkbox').forEach(cb => cb.checked = true);
+    updateSelectedCount();
+}
+
+function deselectAllChanges() {
+    document.querySelectorAll('.change-checkbox').forEach(cb => cb.checked = false);
+    updateSelectedCount();
+}
+
+function selectAllNew() {
+    document.querySelectorAll('.new-checkbox').forEach(cb => cb.checked = true);
+    updateSelectedCount();
+}
+
+function deselectAllNew() {
+    document.querySelectorAll('.new-checkbox').forEach(cb => cb.checked = false);
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const changesSelected = document.querySelectorAll('.change-checkbox:checked').length;
+    const newSelected = document.querySelectorAll('.new-checkbox:checked').length;
+    const total = changesSelected + newSelected;
+    
+    const counter = document.getElementById('selected-count');
+    if (counter) {
+        counter.textContent = `Выбрано: ${total} (изменений: ${changesSelected}, новых: ${newSelected})`;
+    }
+}
+
+function getSelectedChanges() {
+    const selected = [];
+    document.querySelectorAll('.change-checkbox:checked').forEach(cb => {
+        selected.push(parseInt(cb.dataset.idx));
+    });
+    return selected;
+}
+
+function getSelectedNew() {
+    const selected = [];
+    document.querySelectorAll('.new-checkbox:checked').forEach(cb => {
+        selected.push(parseInt(cb.dataset.idx));
+    });
+    return selected;
+}
+
+function toggleDetails(sectionId) {
+    const section = document.getElementById(sectionId);
+    const icon = document.getElementById(sectionId + '-icon') || section?.previousElementSibling?.querySelector('[id$="-icon"]');
+    
+    if (section.classList.contains('hidden')) {
+        section.classList.remove('hidden');
+        if (icon) icon.classList.add('fa-chevron-down');
+        if (icon) icon.classList.remove('fa-chevron-right');
+    } else {
+        section.classList.add('hidden');
+        if (icon) icon.classList.remove('fa-chevron-down');
+        if (icon) icon.classList.add('fa-chevron-right');
+    }
+}
+
+async function executeImport() {
+    const btn = document.getElementById('btn-execute');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Импорт...';
+
+    // Получаем выбранные записи
+    const selectedChanges = getSelectedChanges();
+    const selectedNew = getSelectedNew();
+    
+    // Если ничего не выбрано - предупреждаем
+    if (selectedChanges.length === 0 && selectedNew.length === 0) {
+        alert('Выберите хотя бы одну запись для импорта');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-play mr-2"></i>Выполнить импорт';
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file_id', currentFileId);
+    formData.append('table_name', currentTable);
+    formData.append('selected_changes', JSON.stringify(selectedChanges));
+    formData.append('selected_new', JSON.stringify(selectedNew));
+
+    try {
+        const response = await fetch('/import/db-compare/import', {method: 'POST', body: formData});
+        const result = await response.json();
+
+        if (!response.ok) {
+            alert('Ошибка импорта: ' + (result.error || 'Неизвестная ошибка'));
+            return;
+        }
+
+        const resultDiv = document.getElementById('import-result');
+        resultDiv.classList.remove('hidden');
+        resultDiv.innerHTML = `
+            <div class="p-4 bg-green-50 rounded-lg">
+                <div class="font-bold text-green-900 mb-2"><i class="fas fa-check-circle mr-2"></i>Импорт завершён!</div>
+                <div class="grid grid-cols-3 gap-4 text-sm">
+                    <div>Обновлено: <strong>${result.result?.updated || 0}</strong></div>
+                    <div>Добавлено: <strong>${result.result?.inserted || 0}</strong></div>
+                    <div>Ошибок: <strong>${result.result?.errors || 0}</strong></div>
+                </div>
+            </div>
+        `;
+        
+        // Очищаем выбранные записи
+        document.querySelectorAll('.change-checkbox, .new-checkbox').forEach(cb => cb.checked = false);
+        updateSelectedCount();
+    } catch (e) {
+        alert('Ошибка: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-play mr-2"></i>Выполнить импорт';
+    }
+}
+
+// Drag & drop
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-orange-500'); });
+dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('border-orange-500'); });
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('border-orange-500');
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileSelect({target: {files: [file]}});
+});
+</script>
+{% endblock %}

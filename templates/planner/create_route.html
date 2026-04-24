@@ -1,0 +1,1276 @@
+{% extends "base.html" %}
+
+{% block title %}Создание маршрута | Склад Инструментов{% endblock %}
+
+{% block content %}
+<div class="bg-white border-b border-gray-200 px-6 py-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">
+                <i class="fas fa-route mr-2 text-accent"></i>Создание маршрута обработки
+            </h1>
+            {% if prefill_detail %}
+            <p class="text-sm text-gray-600 mt-1">Деталь: <strong>{{ prefill_detail }}</strong></p>
+            {% endif %}
+        </div>
+        <a href="/details" class="px-4 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 transition text-sm">
+            <i class="fas fa-arrow-left mr-2"></i>Назад к деталям
+        </a>
+    </div>
+</div>
+
+<div class="p-6 bg-white">
+    <form id="route-form" class="space-y-6">
+        <!-- Основная информация о детали -->
+        <div class="bg-white rounded-lg shadow border border-gray-200 p-6">
+            <h2 class="text-lg font-bold text-gray-900 mb-4">
+                <i class="fas fa-info-circle mr-2 text-accent"></i>Информация о детали
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Обозначение *</label>
+                    <input type="text" id="designation" name="designation" value="{{ prefill_detail or '' }}"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent"
+                           placeholder="КШ-6.01.001" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Наименование *</label>
+                    <input type="text" id="detail-name" name="detail_name"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent"
+                           placeholder="Крышка" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Версия</label>
+                    <input type="text" id="version" name="version" value="1.0"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                </div>
+            </div>
+        </div>
+
+        <!-- Материал (каскадные dropdown) -->
+        <div class="bg-white rounded-lg shadow border border-gray-200 p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-gray-900">
+                    <i class="fas fa-cube mr-2 text-accent"></i>Материал
+                </h2>
+                <button type="button" onclick="openMaterialDialog()"
+                        class="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover transition text-sm whitespace-nowrap">
+                    <i class="fas fa-plus mr-1"></i>Добавить
+                </button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Сортамент</label>
+                    <select id="material-sortament" class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                        <option value="">— Тип —</option>
+                        {% for sortament in materials_data.keys()|sort %}
+                        <option value="{{ sortament }}">{{ sortament }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Марка</label>
+                    <select id="material-mark" class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent" disabled>
+                        <option value="">— Марка —</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Размер</label>
+                    <select id="material-dimension" class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent" disabled>
+                        <option value="">— Размер —</option>
+                    </select>
+                    <input type="hidden" id="material-instance-id" name="material_instance_id">
+                </div>
+            </div>
+        </div>
+
+        <!-- Параметры заготовки -->
+        <div class="bg-white rounded-lg shadow border border-gray-200 p-6">
+            <h2 class="text-lg font-bold text-gray-900 mb-4">
+                <i class="fas fa-ruler mr-2 text-accent"></i>Параметры заготовки
+            </h2>
+            
+            <!-- Стандартные поля (прокат, труба и т.д.) -->
+            <div id="params-standard" class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Длина (мм)</label>
+                    <input type="number" id="length" name="length" min="0"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Кол-во заготовок</label>
+                    <input type="number" id="quantity" name="quantity" value="1" min="1"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Возвратные отходы (%)</label>
+                    <input type="number" id="return-percent" name="return_percent" value="0" min="0" max="100"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                </div>
+            </div>
+
+            <!-- Поля для листа/плиты -->
+            <div id="params-sheet" class="grid grid-cols-2 md:grid-cols-4 gap-4 hidden">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Длина (мм)</label>
+                    <input type="number" id="length-sheet" name="length" min="0"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Ширина (мм)</label>
+                    <input type="number" id="width" name="width" min="0"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Кол-во заготовок</label>
+                    <input type="number" id="quantity-sheet" name="quantity" value="1" min="1"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Возвратные отходы (%)</label>
+                    <input type="number" id="return-percent-sheet" name="return_percent" value="0" min="0" max="100"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                </div>
+            </div>
+        </div>
+
+        <!-- Предварительная обработка -->
+        <div class="bg-white rounded-lg shadow border border-gray-200 p-6">
+            <h2 class="text-lg font-bold text-gray-900 mb-4">
+                <i class="fas fa-cog mr-2 text-accent"></i>Предварительная обработка
+            </h2>
+
+            <!-- Переключатель -->
+            <div class="flex items-center gap-4 mb-4">
+                <span class="text-sm text-gray-600">Требуется предварительная обработка заготовки:</span>
+                <div class="flex rounded-lg overflow-hidden border border-gray-200" id="preprocess-toggle-group">
+                    <button type="button" id="preprocess-no" onclick="togglePreprocess(false)"
+                            class="px-4 py-2 text-sm font-medium bg-accent text-white transition">
+                        Не требуется
+                    </button>
+                    <button type="button" id="preprocess-yes" onclick="togglePreprocess(true)"
+                            class="px-4 py-2 text-sm font-medium bg-white text-gray-600 hover:bg-gray-50 transition">
+                        Требуется
+                    </button>
+                </div>
+            </div>
+
+            <!-- Поля предварительной обработки (скрыты по умолчанию) -->
+            <div id="preprocess-fields" class="hidden space-y-4 pl-4 border-l-2 border-gray-200">
+                <!-- Тип заготовки -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-2">Тип заготовки:</label>
+                    <div class="flex flex-wrap gap-3">
+                        <label class="flex items-center cursor-pointer">
+                            <input type="radio" name="form_type" value="Параллелепипед" onchange="onFormTypeChange()" class="mr-2">
+                            <span class="text-sm text-gray-900">Параллелепипед</span>
+                        </label>
+                        <label class="flex items-center cursor-pointer">
+                            <input type="radio" name="form_type" value="Цилиндр" onchange="onFormTypeChange()" class="mr-2">
+                            <span class="text-sm text-gray-900">Цилиндр</span>
+                        </label>
+                        <label class="flex items-center cursor-pointer">
+                            <input type="radio" name="form_type" value="Цилиндр с отверстием" onchange="onFormTypeChange()" class="mr-2">
+                            <span class="text-sm text-gray-900">Цилиндр с отв.</span>
+                        </label>
+                        <label class="flex items-center cursor-pointer">
+                            <input type="radio" name="form_type" value="Техпроцесс" onchange="onFormTypeChange()" class="mr-2">
+                            <span class="text-sm text-gray-900">Техпроцесс</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Параметры формы -->
+                <div id="form-params" class="hidden">
+                    <label class="block text-sm font-medium text-gray-600 mb-2">Параметры заготовки:</label>
+                    <div class="flex flex-wrap gap-4">
+                        <div id="param-l-group" class="hidden">
+                            <label class="block text-xs text-gray-400 mb-1">Длина (L), мм</label>
+                            <input type="number" id="param_l" min="0"
+                                   class="w-28 px-3 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent text-sm">
+                        </div>
+                        <div id="param-w-group" class="hidden">
+                            <label class="block text-xs text-gray-400 mb-1">Ширина (W), мм</label>
+                            <input type="number" id="param_w" min="0"
+                                   class="w-28 px-3 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent text-sm">
+                        </div>
+                        <div id="param-s-group" class="hidden">
+                            <label class="block text-xs text-gray-400 mb-1">Высота (S), мм</label>
+                            <input type="number" id="param_s" min="0"
+                                   class="w-28 px-3 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent text-sm">
+                        </div>
+                        <div id="param-d-group" class="hidden">
+                            <label class="block text-xs text-gray-400 mb-1">Диаметр (Ø), мм</label>
+                            <input type="number" id="param_d" min="0"
+                                   class="w-28 px-3 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent text-sm">
+                        </div>
+                        <div id="param-d1-group" class="hidden">
+                            <label class="block text-xs text-gray-400 mb-1">Отв. (d1), мм</label>
+                            <input type="number" id="param_d1" min="0"
+                                   class="w-28 px-3 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent text-sm">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Операции -->
+        <div class="bg-white rounded-lg shadow border border-gray-200 p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-gray-900">
+                    <i class="fas fa-cogs mr-2 text-accent"></i>Операции
+                </h2>
+                <button type="button" onclick="openOperationDialog(null)"
+                        class="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover transition text-sm">
+                    <i class="fas fa-plus mr-2"></i>Добавить операцию
+                </button>
+            </div>
+
+            <!-- Список операций -->
+            <div id="operations-list" class="space-y-2">
+                <div id="no-operations" class="text-center py-8 text-gray-600">
+                    <i class="fas fa-inbox text-4xl text-gray-400 mb-2"></i>
+                    <p>Операции не добавлены. Нажмите «Добавить операцию»</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Кнопки сохранения -->
+        <div class="flex justify-end space-x-3">
+            <a href="/details" class="px-6 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 transition">
+                Отмена
+            </a>
+            <button type="button" id="save-btn" onclick="saveRoute()" disabled
+                    class="px-6 py-2 bg-accent text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
+                <i class="fas fa-save mr-2"></i>Сохранить маршрут
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Диалог добавления материала -->
+<div id="material-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 p-6 max-h-[90vh] overflow-y-auto">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">
+            <i class="fas fa-cube mr-2 text-accent"></i>Добавление материала
+        </h3>
+
+        <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Сортамент *</label>
+                    <select id="mat-sortament" onchange="onMatSortamentChange()"
+                            class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                        <option value="">— Выберите сортамент —</option>
+                        {% for sortament in materials_data.keys()|sort %}
+                        <option value="{{ sortament }}">{{ sortament }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">или новый (введите)</label>
+                    <input type="text" id="mat-sortament-new"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent"
+                           placeholder="Новый сортамент...">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Марка материала *</label>
+                    <select id="mat-mark" onchange="onMatMarkChange()"
+                            class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                        <option value="">— Выберите марку —</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">или новая (введите)</label>
+                    <input type="text" id="mat-mark-new"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent"
+                           placeholder="Новая марка...">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Размер 1 (Ø или сторона)</label>
+                    <input type="number" id="mat-dim1" min="0" step="0.01"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Размер 2</label>
+                    <input type="number" id="mat-dim2" min="0" step="0.01"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Размер 3</label>
+                    <input type="number" id="mat-dim3" min="0" step="0.01"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Цена за тонну (руб)</label>
+                    <input type="number" id="mat-price-ton" min="0" step="0.01"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Цена за штуку (руб)</label>
+                    <input type="number" id="mat-price-piece" min="0" step="0.01"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                </div>
+            </div>
+        </div>
+
+        <div class="flex justify-end space-x-3 mt-6">
+            <button type="button" onclick="closeMaterialDialog()"
+                    class="px-4 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 transition">
+                Отмена
+            </button>
+            <button type="button" onclick="saveMaterial()"
+                    class="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover transition">
+                <i class="fas fa-save mr-2"></i>Сохранить
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Диалог добавления операции -->
+<div id="operation-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 p-6 max-h-[90vh] overflow-y-auto">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">
+            <i class="fas fa-cog mr-2 text-accent"></i>Добавление операции
+        </h3>
+
+        <div class="space-y-4">
+            <!-- Кооперация -->
+            <div class="flex items-center gap-4">
+                <span class="text-sm text-gray-600">Режим:</span>
+                <div class="flex rounded-lg overflow-hidden border border-gray-200" id="coop-toggle-group">
+                    <button type="button" id="coop-no" onclick="toggleCoop(false)"
+                            class="px-4 py-2 text-sm font-medium bg-accent text-white transition">
+                        Свое
+                    </button>
+                    <button type="button" id="coop-yes" onclick="toggleCoop(true)"
+                            class="px-4 py-2 text-sm font-medium bg-white text-gray-600 hover:bg-gray-50 transition">
+                        По кооперации
+                    </button>
+                </div>
+            </div>
+
+            <!-- Цех (только для "Свое") -->
+            <div id="coop-fields-own">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-600 mb-1">Цех</label>
+                        <select id="op-workshop" onchange="onWorkshopChange()" class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                            <option value="">— Не выбран —</option>
+                            {% for ws in workshops %}
+                            <option value="{{ ws.id }}">{{ ws.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-600 mb-1">Операция</label>
+                        <select id="op-type" onchange="onOperationChange()" class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                            <option value="">— Выберите —</option>
+                            {% for op_type in operation_types|sort(attribute='name') %}
+                            <option value="{{ op_type.id }}">{{ op_type.name[:40] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Оборудование</label>
+                    <select id="op-equipment" class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                        <option value="">— Сначала выберите операцию —</option>
+                    </select>
+                </div>
+
+                <!-- Дополнительные поля (в столбик) -->
+                <div class="mt-4 space-y-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-600 mb-1">Время подготовительно-заключительное (мин)</label>
+                        <input type="number" id="op-prep-time" value="0" min="0"
+                               class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-600 mb-1">Время штучное (мин)</label>
+                        <input type="number" id="op-duration" value="0" min="0"
+                               class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-600 mb-1">Время на контрольное измерение (мин)</label>
+                        <input type="number" id="op-control-time" value="0" min="0"
+                               class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-600 mb-1">Кол-во деталей за установ</label>
+                        <input type="number" id="op-parts-count" value="1" min="1"
+                               class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Предприятие кооперации (только для "По кооперации") -->
+            <div id="coop-fields-coop" class="hidden">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Предприятие кооперации</label>
+                    <select id="op-coop-company" class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                        <option value="">— Выберите —</option>
+                        {% for coop in cooperatives %}
+                        <option value="{{ coop.id }}">{{ coop.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Операция (кооперация)</label>
+                    <input type="text" id="op-coop-operation"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent"
+                           placeholder="Название операции">
+                </div>
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Стоимость операции (руб)</label>
+                    <input type="number" id="op-coop-cost" value="0" min="0" step="0.01"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                </div>
+            </div>
+
+            <!-- Общее поле -->
+            <div>
+                <label class="block text-sm font-medium text-gray-600 mb-1">Примечание</label>
+                <input type="text" id="op-notes"
+                       class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent"
+                       placeholder="Необязательно">
+            </div>
+        </div>
+
+        <div class="flex justify-end space-x-3 mt-6">
+            <button type="button" onclick="closeOperationDialog()"
+                    class="px-4 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 transition">
+                Отмена
+            </button>
+            <button type="button" onclick="addOperation()"
+                    class="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover transition">
+                <i class="fas fa-plus mr-2"></i>Добавить
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+console.log('Planner script loaded');
+
+// Данные
+let operationsList = [];
+let operationCounter = 0;
+let preprocessingEnabled = false;
+let editingOperationIndex = null; // Индекс редактируемой операции (null = добавление новой)
+
+// Каскадные dropdown материалов
+const materialsData = {{ materials_data | default({}) | tojson }};
+console.log('Materials data loaded:', materialsData ? Object.keys(materialsData).length : 0, 'sortaments');
+
+// ===== ВАЛИДАЦИЯ ФОРМЫ =====
+
+function validateForm() {
+    const designation = document.getElementById('designation').value.trim();
+    const detailName = document.getElementById('detail-name').value.trim();
+    const hasOperations = operationsList.length > 0;
+
+    // Обязательные поля: обозначение, наименование, хотя бы одна операция
+    const isValid = designation && detailName && hasOperations;
+
+    const saveBtn = document.getElementById('save-btn');
+    if (saveBtn) {
+        saveBtn.disabled = !isValid;
+    }
+}
+
+// ===== ДИАЛОГ МАТЕРИАЛА =====
+
+
+// Обновление марки при выборе сортамента в диалоге
+function onMatSortamentChange() {
+    const sortament = document.getElementById('mat-sortament').value;
+    const markSelect = document.getElementById('mat-mark');
+    
+    markSelect.innerHTML = '<option value="">— Выберите марку —</option>';
+    
+    if (sortament && materialsData[sortament]) {
+        Object.keys(materialsData[sortament]).sort().forEach(mark => {
+            const opt = document.createElement('option');
+            opt.value = mark;
+            opt.textContent = mark;
+            markSelect.appendChild(opt);
+        });
+    }
+}
+
+// Функция-заглушка для марки (вызывается при изменении, но сейчас не нужна)
+function onMatMarkChange() {
+    // Марка уже выбрана, ничего делать не надо
+}
+
+function openMaterialDialog() {
+    document.getElementById('material-dialog').classList.remove('hidden');
+    // Reset fields
+    document.getElementById('mat-sortament').value = '';
+    document.getElementById('mat-sortament-new').value = '';
+    document.getElementById('mat-mark').value = '';
+    document.getElementById('mat-mark-new').value = '';
+    document.getElementById('mat-dim1').value = '';
+    document.getElementById('mat-dim2').value = '';
+    document.getElementById('mat-dim3').value = '';
+    document.getElementById('mat-price-ton').value = '';
+    document.getElementById('mat-price-piece').value = '';
+    
+    // Заполняем список марок ВСЕМИ доступными марками
+    const markSelect = document.getElementById('mat-mark');
+    markSelect.innerHTML = '<option value="">— Выберите марку —</option>';
+    
+    // Собираем все уникальные марки из всех сортаментов
+    const allMarks = new Set();
+    Object.keys(materialsData).forEach(sort => {
+        Object.keys(materialsData[sort]).forEach(mark => {
+            allMarks.add(mark);
+        });
+    });
+    // Добавляем все марки в dropdown
+    Array.from(allMarks).sort().forEach(mark => {
+        const opt = document.createElement('option');
+        opt.value = mark;
+        opt.textContent = mark;
+        markSelect.appendChild(opt);
+    });
+}
+
+function closeMaterialDialog() {
+    document.getElementById('material-dialog').classList.add('hidden');
+}
+
+async function saveMaterial() {
+    // Определяем сортамент: из dropdown или из нового поля
+    let sortamentName = document.getElementById('mat-sortament').value.trim();
+    const sortamentNew = document.getElementById('mat-sortament-new').value.trim();
+    if (!sortamentName && sortamentNew) {
+        sortamentName = sortamentNew;
+    }
+
+    // Определяем марку: из dropdown или из нового поля
+    let markName = document.getElementById('mat-mark').value.trim();
+    const markNew = document.getElementById('mat-mark-new').value.trim();
+    if (!markName && markNew) {
+        markName = markNew;
+    }
+
+    if (!sortamentName || !markName) {
+        alert('Заполните сортамент и марку материала');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('sortament_name', sortamentName);
+    formData.append('mark_name', markName);
+    formData.append('dim1', document.getElementById('mat-dim1').value);
+    formData.append('dim2', document.getElementById('mat-dim2').value);
+    formData.append('dim3', document.getElementById('mat-dim3').value);
+    formData.append('price_ton', document.getElementById('mat-price-ton').value);
+    formData.append('price_piece', document.getElementById('mat-price-piece').value);
+
+    try {
+        const response = await fetch('/planner/api/materials/create', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            alert(`Материал "${markName}" создан!`);
+            closeMaterialDialog();
+            // Reload page to refresh materials data
+            window.location.reload();
+        } else {
+            alert('Ошибка: ' + (result.message || 'Неизвестная'));
+        }
+    } catch (e) {
+        alert('Ошибка сети: ' + e.message);
+    }
+}
+
+// ===== ПРЕДВАРИТЕЛЬНАЯ ОБРАБОТКА =====
+
+function togglePreprocess(enabled) {
+    preprocessingEnabled = enabled;
+    const fields = document.getElementById('preprocess-fields');
+    const btnNo = document.getElementById('preprocess-no');
+    const btnYes = document.getElementById('preprocess-yes');
+
+    if (enabled) {
+        fields.classList.remove('hidden');
+        btnNo.className = 'px-4 py-2 text-sm font-medium bg-white text-gray-600 hover:bg-gray-50 transition';
+        btnYes.className = 'px-4 py-2 text-sm font-medium bg-accent text-white transition';
+    } else {
+        fields.classList.add('hidden');
+        btnNo.className = 'px-4 py-2 text-sm font-medium bg-accent text-white transition';
+        btnYes.className = 'px-4 py-2 text-sm font-medium bg-white text-gray-600 hover:bg-gray-50 transition';
+        // Сброс полей
+        document.querySelectorAll('input[name="form_type"]').forEach(r => r.checked = false);
+        document.getElementById('form-params').classList.add('hidden');
+        ['param_l', 'param_w', 'param_s', 'param_d', 'param_d1'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+    }
+}
+
+function onFormTypeChange() {
+    const formType = document.querySelector('input[name="form_type"]:checked');
+    const paramsDiv = document.getElementById('form-params');
+
+    if (!formType) {
+        paramsDiv.classList.add('hidden');
+        return;
+    }
+
+    paramsDiv.classList.remove('hidden');
+
+    // Скрыть все группы
+    ['param-l', 'param-w', 'param-s', 'param-d', 'param-d1'].forEach(id => {
+        document.getElementById(id + '-group').classList.add('hidden');
+    });
+
+    // Показать нужные
+    const val = formType.value;
+    if (val === 'Параллелепипед') {
+        ['param-l', 'param-w', 'param-s'].forEach(id => {
+            document.getElementById(id + '-group').classList.remove('hidden');
+        });
+    } else if (val === 'Цилиндр') {
+        ['param-l', 'param-d'].forEach(id => {
+            document.getElementById(id + '-group').classList.remove('hidden');
+        });
+    } else if (val === 'Цилиндр с отверстием') {
+        ['param-l', 'param-d', 'param-d1'].forEach(id => {
+            document.getElementById(id + '-group').classList.remove('hidden');
+        });
+    } else if (val === 'Техпроцесс') {
+        paramsDiv.classList.add('hidden');
+    }
+}
+
+function updateBlankParams(sortament) {
+    const standardDiv = document.getElementById('params-standard');
+    const sheetDiv = document.getElementById('params-sheet');
+    
+    if (!sortament) {
+        standardDiv.classList.add('hidden');
+        sheetDiv.classList.add('hidden');
+        return;
+    }
+    
+    const isSheet = sortament.toLowerCase().includes('лист') || sortament.toLowerCase().includes('плит');
+
+    // Синхронизация значений между полями
+    if (isSheet) {
+        // Копируем length -> length-sheet и наоборот
+        const lengthVal = document.getElementById('length').value;
+        const lengthSheetVal = document.getElementById('length-sheet').value;
+        if (lengthVal && !lengthSheetVal) document.getElementById('length-sheet').value = lengthVal;
+        if (lengthSheetVal && !lengthVal) document.getElementById('length').value = lengthSheetVal;
+        
+        const qtyVal = document.getElementById('quantity').value;
+        const qtySheetVal = document.getElementById('quantity-sheet').value;
+        if (qtyVal && !qtySheetVal) document.getElementById('quantity-sheet').value = qtyVal;
+        if (qtySheetVal && !qtyVal) document.getElementById('quantity').value = qtySheetVal;
+        
+        const retVal = document.getElementById('return-percent').value;
+        const retSheetVal = document.getElementById('return-percent-sheet').value;
+        if (retVal && !retSheetVal) document.getElementById('return-percent-sheet').value = retVal;
+        if (retSheetVal && !retVal) document.getElementById('return-percent').value = retSheetVal;
+        
+        standardDiv.classList.add('hidden');
+        sheetDiv.classList.remove('hidden');
+    } else {
+        standardDiv.classList.remove('hidden');
+        sheetDiv.classList.add('hidden');
+    }
+}
+
+// Инициализация при загрузке страницы
+window.addEventListener('DOMContentLoaded', () => {
+    const currentSortament = document.getElementById('material-sortament').value;
+    if (currentSortament) {
+        updateBlankParams(currentSortament);
+    }
+});
+
+document.getElementById('material-sortament').addEventListener('change', function() {
+    const sortament = this.value;
+    const markSelect = document.getElementById('material-mark');
+    const dimSelect = document.getElementById('material-dimension');
+
+    markSelect.innerHTML = '<option value="">— Марка —</option>';
+    dimSelect.innerHTML = '<option value="">— Размер —</option>';
+    dimSelect.disabled = true;
+    document.getElementById('material-instance-id').value = '';
+
+    // Переключение полей параметров заготовки
+    updateBlankParams(sortament);
+
+    if (sortament && materialsData[sortament]) {
+        const marks = Object.keys(materialsData[sortament]).sort();
+        marks.forEach(mark => {
+            const opt = document.createElement('option');
+            opt.value = mark;
+            opt.textContent = mark;
+            markSelect.appendChild(opt);
+        });
+        markSelect.disabled = false;
+    } else {
+        markSelect.disabled = true;
+    }
+});
+
+document.getElementById('material-mark').addEventListener('change', function() {
+    const sortament = document.getElementById('material-sortament').value;
+    const mark = this.value;
+    const dimSelect = document.getElementById('material-dimension');
+
+    dimSelect.innerHTML = '<option value="">— Размер —</option>';
+    document.getElementById('material-instance-id').value = '';
+
+    if (sortament && mark && materialsData[sortament] && materialsData[sortament][mark]) {
+        // Сортировка размеров от меньшего к большему
+        // Размеры имеют формат "100 х 200" или "100 х 200 х 300"
+        const sortedMaterials = materialsData[sortament][mark].slice().sort((a, b) => {
+            const dimsA = a.dimension_str.split('х').map(s => parseFloat(s.trim()) || 0);
+            const dimsB = b.dimension_str.split('х').map(s => parseFloat(s.trim()) || 0);
+            
+            // Сравниваем по первому, потом по второму, потом по третьему измерению
+            for (let i = 0; i < Math.max(dimsA.length, dimsB.length); i++) {
+                const valA = dimsA[i] || 0;
+                const valB = dimsB[i] || 0;
+                if (valA !== valB) return valA - valB;
+            }
+            return 0;
+        });
+        
+        sortedMaterials.forEach(mat => {
+            const opt = document.createElement('option');
+            opt.value = mat.id;
+            opt.textContent = mat.dimension_str;
+            dimSelect.appendChild(opt);
+        });
+        dimSelect.disabled = false;
+    } else {
+        dimSelect.disabled = true;
+    }
+});
+
+document.getElementById('material-dimension').addEventListener('change', function() {
+    document.getElementById('material-instance-id').value = this.value;
+});
+
+// Обновление оборудования при выборе операции (ОБРАБОТЧИК УДАЛЁН - используется onOperationChange() в HTML)
+// document.getElementById('op-type').addEventListener('change', function() {
+//     const opTypeId = this.value;
+//     const equipSelect = document.getElementById('op-equipment');
+//     equipSelect.innerHTML = '<option value="">— Выберите —</option>';
+//
+//     if (opTypeId) {
+//         fetch(`/planner/api/equipment/by-operation/${opTypeId}`)
+//             .then(r => r.json())
+//             .then(data => {
+//                 data.equipment.forEach(eq => {
+//                     const opt = document.createElement('option');
+//                     opt.value = eq.id;
+//                     opt.textContent = eq.name;
+//                     equipSelect.appendChild(opt);
+//                 });
+//             });
+//     }
+// });
+
+// ===== ДИАЛОГ ОПЕРАЦИЙ =====
+
+let isCooperation = false;
+
+function toggleCoop(enabled) {
+    isCooperation = enabled;
+    const ownFields = document.getElementById('coop-fields-own');
+    const coopFields = document.getElementById('coop-fields-coop');
+    const btnNo = document.getElementById('coop-no');
+    const btnYes = document.getElementById('coop-yes');
+
+    if (enabled) {
+        ownFields.classList.add('hidden');
+        coopFields.classList.remove('hidden');
+        btnNo.className = 'px-4 py-2 text-sm font-medium bg-white text-gray-600 hover:bg-gray-50 transition';
+        btnYes.className = 'px-4 py-2 text-sm font-medium bg-accent text-white transition';
+    } else {
+        ownFields.classList.remove('hidden');
+        coopFields.classList.add('hidden');
+        btnNo.className = 'px-4 py-2 text-sm font-medium bg-accent text-white transition';
+        btnYes.className = 'px-4 py-2 text-sm font-medium bg-white text-gray-600 hover:bg-gray-50 transition';
+    }
+}
+
+function onOperationChange() {
+    const opTypeId = document.getElementById('op-type').value;
+    const equipSelect = document.getElementById('op-equipment');
+    equipSelect.innerHTML = '<option value="">— Выберите —</option>';
+
+    if (opTypeId) {
+        fetch(`/planner/api/equipment/by-operation/${opTypeId}`)
+            .then(r => r.json())
+            .then(data => {
+                equipSelect.innerHTML = '<option value="">— Выберите —</option>';
+                if (data.equipment && data.equipment.length > 0) {
+                    data.equipment.forEach(eq => {
+                        const opt = document.createElement('option');
+                        opt.value = eq.id;
+                        const inv = eq.inventory_number ? ` (${eq.inventory_number})` : '';
+                        opt.textContent = `${eq.name}${inv}`;
+                        equipSelect.appendChild(opt);
+                    });
+                } else {
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.textContent = '— Нет оборудования —';
+                    opt.disabled = true;
+                    equipSelect.appendChild(opt);
+                }
+            })
+            .catch(err => console.error('Error loading equipment:', err));
+    }
+}
+
+function onWorkshopChange() {
+    const workshopId = document.getElementById('op-workshop').value;
+    const opSelect = document.getElementById('op-type');
+    const equipSelect = document.getElementById('op-equipment');
+
+    opSelect.value = '';
+    equipSelect.innerHTML = '<option value="">— Сначала выберите операцию —</option>';
+
+    const url = workshopId
+        ? `/planner/api/operation-types?workshop_id=${workshopId}`
+        : '/planner/api/operation-types';
+
+    console.log('Loading operations for workshop:', workshopId, 'URL:', url);
+
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            console.log('Operations loaded:', data.operation_types);
+            opSelect.innerHTML = '<option value="">— Выберите —</option>';
+            if (data.operation_types && data.operation_types.length > 0) {
+                data.operation_types
+                    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                    .forEach(op => {
+                        const opt = document.createElement('option');
+                        opt.value = op.id;
+                        opt.textContent = op.name;
+                        opSelect.appendChild(opt);
+                    });
+            } else {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = 'Нет операций для этого цеха';
+                opSelect.appendChild(opt);
+            }
+        })
+        .catch(err => {
+            console.error('Error loading operations:', err);
+            // Если ошибка - загружаем все операции
+            fetch('/planner/api/operation-types')
+                .then(r => r.json())
+                .then(data => {
+                    opSelect.innerHTML = '<option value="">— Выберите —</option>';
+                    data.operation_types
+                        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                        .forEach(op => {
+                            const opt = document.createElement('option');
+                            opt.value = op.id;
+                            opt.textContent = op.name;
+                            opSelect.appendChild(opt);
+                        });
+                });
+        });
+}
+
+function openOperationDialog(editIndex = null) {
+    document.getElementById('operation-dialog').classList.remove('hidden');
+    editingOperationIndex = editIndex;
+    
+    // Сбрасываем форму
+    isCooperation = false;
+    toggleCoop(false);
+    document.getElementById('op-type').value = '';
+    document.getElementById('op-equipment').innerHTML = '<option value="">— Сначала выберите операцию —</option>';
+    document.getElementById('op-workshop').value = '';
+    document.getElementById('op-prep-time').value = '0';
+    document.getElementById('op-control-time').value = '0';
+    document.getElementById('op-parts-count').value = '1';
+    document.getElementById('op-duration').value = '0';
+    document.getElementById('op-coop-company').value = '';
+    document.getElementById('op-coop-operation').value = '';
+    document.getElementById('op-coop-cost').value = '0';
+    document.getElementById('op-notes').value = '';
+    
+    // Если редактирование - заполняем форму данными операции
+    if (editIndex !== null && operationsList[editIndex]) {
+        const op = operationsList[editIndex];
+        const dialogTitle = document.querySelector('#operation-dialog h3');
+        if (dialogTitle) {
+            dialogTitle.innerHTML = `<i class="fas fa-edit mr-2 text-accent"></i>Редактирование операции #${op.seq}`;
+        }
+        
+        if (op.is_cooperation) {
+            // Режим кооперации
+            toggleCoop(true);
+            document.getElementById('op-coop-company').value = op.coop_company_id || '';
+            document.getElementById('op-coop-operation').value = op.operation_name || '';
+            document.getElementById('op-coop-cost').value = op.duration || '0';
+        } else {
+            // Своё производство
+            document.getElementById('op-workshop').value = op.workshop_id || '';
+            // Загружаем типы операций для выбранного цеха
+            onWorkshopChange();
+            setTimeout(() => {
+                document.getElementById('op-type').value = op.operation_id || '';
+                // После выбора операции загружаем оборудование
+                onOperationChange();
+                setTimeout(() => {
+                    document.getElementById('op-equipment').value = op.equipment_id || '';
+                    document.getElementById('op-prep-time').value = op.prep_time || '0';
+                    document.getElementById('op-control-time').value = op.control_time || '0';
+                    document.getElementById('op-parts-count').value = op.parts_count || '1';
+                    document.getElementById('op-duration').value = op.duration || '0';
+                    document.getElementById('op-notes').value = op.notes || '';
+                }, 100);
+            }, 100);
+        }
+    } else {
+        // Добавление новой - сбрасываем заголовок
+        const dialogTitle = document.querySelector('#operation-dialog h3');
+        if (dialogTitle) {
+            dialogTitle.innerHTML = `<i class="fas fa-cog mr-2 text-accent"></i>Добавление операции`;
+        }
+    }
+}
+
+function closeOperationDialog() {
+    document.getElementById('operation-dialog').classList.add('hidden');
+    editingOperationIndex = null;
+    
+    // Сбрасываем заголовок диалога
+    const dialogTitle = document.querySelector('#operation-dialog h3');
+    if (dialogTitle) {
+        dialogTitle.innerHTML = `<i class="fas fa-cog mr-2 text-accent"></i>Добавление операции`;
+    }
+}
+
+// Редактирование операции - делаем доступным глобально
+window.editOperation = function(index) {
+    openOperationDialog(index);
+};
+
+function addOperation() {
+    const workshopId = document.getElementById('op-workshop').value;
+    const opTypeId = document.getElementById('op-type').value;
+    const equipId = document.getElementById('op-equipment').value;
+    const prepTime = document.getElementById('op-prep-time').value || '0';
+    const controlTime = document.getElementById('op-control-time').value || '0';
+    const partsCount = document.getElementById('op-parts-count').value || '1';
+    const duration = document.getElementById('op-duration').value || '0';
+    const notes = document.getElementById('op-notes').value;
+    const coopCompanyId = document.getElementById('op-coop-company').value;
+    const coopOperation = document.getElementById('op-coop-operation').value;
+    const coopCost = document.getElementById('op-coop-cost').value || '0';
+
+    // Проверка режима кооперации
+    if (isCooperation) {
+        if (!coopCompanyId || !coopOperation) {
+            alert('Выберите предприятие и укажите операцию');
+            return;
+        }
+
+        const coopName = document.getElementById('op-coop-company').selectedOptions[0].text;
+        const newOp = {
+            operation_id: null,
+            operation_name: coopOperation,
+            equipment_id: null,
+            equipment_name: coopName,
+            workshop_id: null,
+            duration: coopCost,
+            prep_time: 0,
+            control_time: 0,
+            parts_count: 1,
+            notes: notes,
+            is_cooperation: true,
+            coop_company_id: coopCompanyId,
+            coop_company_name: coopName,
+        };
+        
+        if (editingOperationIndex !== null) {
+            // Редактирование - сохраняем старый seq
+            newOp.seq = operationsList[editingOperationIndex].seq;
+            operationsList[editingOperationIndex] = newOp;
+        } else {
+            // Добавление новой
+            operationCounter++;
+            newOp.seq = operationCounter;
+            operationsList.push(newOp);
+        }
+    } else {
+        if (!opTypeId || !equipId) {
+            alert('Выберите тип операции и оборудование');
+            return;
+        }
+
+        const opName = document.getElementById('op-type').selectedOptions[0].text;
+        const equipName = document.getElementById('op-equipment').selectedOptions[0].text;
+        
+        const newOp = {
+            operation_id: opTypeId,
+            operation_name: opName,
+            equipment_id: equipId,
+            equipment_name: equipName,
+            workshop_id: workshopId,
+            duration: duration,
+            prep_time: prepTime,
+            control_time: controlTime,
+            parts_count: partsCount,
+            notes: notes,
+            is_cooperation: false,
+        };
+        
+        if (editingOperationIndex !== null) {
+            // Редактирование - сохраняем старый seq
+            newOp.seq = operationsList[editingOperationIndex].seq;
+            operationsList[editingOperationIndex] = newOp;
+        } else {
+            // Добавление новой
+            operationCounter++;
+            newOp.seq = operationCounter;
+            operationsList.push(newOp);
+        }
+    }
+
+    renderOperations();
+    closeOperationDialog();
+    validateForm();
+}
+
+function removeOperation(index) {
+    operationsList.splice(index, 1);
+    renderOperations();
+    validateForm();
+}
+
+function moveOperation(index, direction) {
+    // direction: -1 = вверх, 1 = вниз
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= operationsList.length) return;
+    
+    // Меняем местами
+    const temp = operationsList[index];
+    operationsList[index] = operationsList[newIndex];
+    operationsList[newIndex] = temp;
+    
+    // Перенумеровываем
+    operationsList.forEach((op, i) => {
+        op.seq = i + 1;
+    });
+    
+    renderOperations();
+    validateForm();
+}
+
+function renderOperations() {
+    const container = document.getElementById('operations-list');
+    const noOps = document.getElementById('no-operations');
+
+    if (operationsList.length === 0) {
+        container.innerHTML = '';
+        container.appendChild(noOps);
+        noOps.style.display = 'block';
+        return;
+    }
+
+    let html = '<div class="overflow-x-auto"><table class="min-w-full divide-y divide-border-primary">';
+    html += '<thead class="bg-gray-50"><tr>';
+    html += '<th class="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">№</th>';
+    html += '<th class="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">Операция</th>';
+    html += '<th class="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">Оборудование</th>';
+    html += '<th class="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase">Время подгот.</th>';
+    html += '<th class="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase">Время штучное</th>';
+    html += '<th class="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase">Время контрол.</th>';
+    html += '<th class="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase">Сумма (мин)</th>';
+    html += '<th class="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase">Кол-во за устан.</th>';
+    html += '<th class="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase">Порядок</th>';
+    html += '<th class="px-4 py-3 text-center text-xs font-medium text-gray-600 uppercase">Действия</th>';
+    html += '</tr></thead><tbody class="bg-white divide-y divide-border-primary">';
+
+    operationsList.forEach((op, index) => {
+        // Вычисляем сумму
+        const totalTime = (parseInt(op.duration) || 0) + (parseInt(op.prep_time) || 0) + (parseInt(op.control_time) || 0);
+        
+        html += `<tr class="hover:bg-accent-bg">`;
+        html += `<td class="px-4 py-3 text-sm">${op.seq}</td>`;
+        html += `<td class="px-4 py-3 text-sm font-medium">
+                    ${op.operation_name}
+                    ${op.is_cooperation ? '<span class="ml-2 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">Кооперация</span>' : ''}
+                 </td>`;
+        html += `<td class="px-4 py-3 text-sm">${op.equipment_name || '—'}</td>`;
+        html += `<td class="px-4 py-3 text-sm text-center">${op.is_cooperation ? '—' : (op.prep_time || '0')}</td>`;
+        html += `<td class="px-4 py-3 text-sm text-center">${op.is_cooperation ? '—' : (op.duration + ' мин')}</td>`;
+        html += `<td class="px-4 py-3 text-sm text-center">${op.is_cooperation ? '—' : (op.control_time || '0')}</td>`;
+        html += `<td class="px-4 py-3 text-sm text-center font-bold">${totalTime}</td>`;
+        html += `<td class="px-4 py-3 text-sm text-center">${op.parts_count || '1'}</td>`;
+        
+        // Кнопки перемещения
+        html += `<td class="px-4 py-3 text-sm text-center">`;
+        html += `<div class="flex items-center justify-center space-x-1">`;
+        if (index > 0) {
+            html += `<button type="button" onclick="moveOperation(${index}, -1)" class="p-1 text-blue-600 hover:text-blue-800" title="Переместить вверх">`;
+            html += `<i class="fas fa-arrow-up"></i></button>`;
+        } else {
+            html += `<span class="p-1 text-gray-300"><i class="fas fa-arrow-up"></i></span>`;
+        }
+        if (index < operationsList.length - 1) {
+            html += `<button type="button" onclick="moveOperation(${index}, 1)" class="p-1 text-blue-600 hover:text-blue-800" title="Переместить вниз">`;
+            html += `<i class="fas fa-arrow-down"></i></button>`;
+        } else {
+            html += `<span class="p-1 text-gray-300"><i class="fas fa-arrow-down"></i></span>`;
+        }
+        html += `</div></td>`;
+        
+        html += `<td class="px-4 py-3 text-center">
+                    <div class="flex items-center justify-center space-x-1">
+                        <button type="button" onclick="editOperation(${index})" class="p-1 text-blue-600 hover:text-blue-800" title="Редактировать">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button type="button" onclick="removeOperation(${index})" class="text-error hover:text-error-dark" title="Удалить">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+               </td>`;
+        html += `</tr>`;
+    });
+
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+// Сохранение маршрута
+async function saveRoute() {
+    const designation = document.getElementById('designation').value;
+    const detailName = document.getElementById('detail-name').value;
+
+    if (!designation || !detailName) {
+        alert('Заполните обозначение и наименование');
+        return;
+    }
+
+    if (operationsList.length === 0) {
+        alert('Добавьте хотя бы одну операцию');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('detail_name', detailName);
+    formData.append('designation', designation);
+    formData.append('version', document.getElementById('version').value);
+    formData.append('material_instance_id', document.getElementById('material-instance-id').value);
+    
+    // Получаем quantity - пробуем оба варианта
+    const quantityEl = document.getElementById('quantity') || document.getElementById('quantity-sheet');
+    formData.append('quantity', quantityEl ? quantityEl.value : '1');
+
+    // Получаем length - проверяем какой блок виден
+    const standardDiv = document.getElementById('params-standard');
+    const isStandardVisible = standardDiv && !standardDiv.classList.contains('hidden');
+    
+    let lengthValue = '';
+    if (isStandardVisible) {
+        lengthValue = document.getElementById('length')?.value || '';
+    } else {
+        lengthValue = document.getElementById('length-sheet')?.value || '';
+    }
+    formData.append('length', lengthValue);
+
+    // Получаем width (для листа/плиты)
+    const widthEl = document.getElementById('width');
+    if (widthEl && widthEl.value) {
+        formData.append('width', widthEl.value);
+    }
+
+    const returnPercentEl = document.getElementById('return-percent') || document.getElementById('return-percent-sheet');
+    formData.append('return_percent', returnPercentEl ? returnPercentEl.value : '0');
+    formData.append('item_type', 'detail');
+
+    // Данные предварительной обработки
+    const formType = document.querySelector('input[name="form_type"]:checked');
+    formData.append('preprocessing', preprocessingEnabled);
+    if (preprocessingEnabled && formType) {
+        formData.append('form_type', formType.value);
+        formData.append('param_l', document.getElementById('param_l')?.value || '');
+        formData.append('param_w', document.getElementById('param_w')?.value || '');
+        formData.append('param_s', document.getElementById('param_s')?.value || '');
+        formData.append('param_d', document.getElementById('param_d')?.value || '');
+        formData.append('param_d1', document.getElementById('param_d1')?.value || '');
+    }
+
+    formData.append('operations', JSON.stringify(operationsList));
+
+    try {
+        const response = await fetch('/planner/save', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            alert(`Маршрут "${detailName}" сохранён! ID: ${result.route_id}`);
+            window.location.href = `/routes/${result.route_id}`;
+        } else {
+            alert('Ошибка: ' + (result.error || 'Неизвестная'));
+        }
+    } catch (e) {
+        alert('Ошибка сети: ' + e.message);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Валидация при изменении основных полей
+    document.getElementById('designation').addEventListener('input', validateForm);
+    document.getElementById('detail-name').addEventListener('input', validateForm);
+
+    // Начальная проверка
+    validateForm();
+
+{% if prefill_detail %}
+    // Автозаполнение наименования по обозначению из БД
+    const designation = '{{ prefill_detail }}';
+    if (designation) {
+        fetch(`/planner/api/detail/${encodeURIComponent(designation)}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.found && data.detail.name) {
+                    document.getElementById('detail-name').value = data.detail.name;
+                }
+            })
+            .catch(() => {});
+    }
+{% endif %}
+});
+</script>
+
+{% endblock %}

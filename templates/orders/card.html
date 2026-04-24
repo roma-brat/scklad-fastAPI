@@ -1,0 +1,654 @@
+{% extends "base.html" %}
+
+{% block title %}ЭМК - Заказ {{ order_id }}{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Container styles */
+#emc-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+}
+main {
+    max-width: 100% !important;
+    width: 100% !important;
+    overflow-x: visible !important;
+}
+
+#emc-table {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 12px !important;
+    table-layout: fixed !important;
+}
+#emc-table th, #emc-table td {
+    border: 1px solid #333 !important;
+    padding: 4px 8px !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    height: 42px !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+}
+#emc-table th:nth-child(1),
+#emc-table td:nth-child(1) { width: 5% !important; min-width: 45px !important; }
+#emc-table th:nth-child(2),
+#emc-table td:nth-child(2) { width: 8% !important; min-width: 65px !important; }
+#emc-table th:nth-child(3),
+#emc-table td:nth-child(3) { text-align: left !important; width: 24% !important; min-width: 140px !important; }
+#emc-table th:nth-child(4),
+#emc-table td:nth-child(4) { width: 13% !important; min-width: 95px !important; }
+#emc-table th:nth-child(5),
+#emc-table td:nth-child(5) { width: 10% !important; min-width: 85px !important; }
+#emc-table th:nth-child(6),
+#emc-table td:nth-child(6),
+#emc-table th:nth-child(7),
+#emc-table td:nth-child(7),
+#emc-table th:nth-child(8),
+#emc-table td:nth-child(8) { width: 6% !important; min-width: 50px !important; }
+#emc-table th:nth-child(9),
+#emc-table td:nth-child(9) { width: 18% !important; min-width: 110px !important; }
+#emc-table th:nth-child(10),
+#emc-table td:nth-child(10) { width: 10% !important; min-width: 75px !important; }
+.emc-table th {
+    background: #e5e7eb;
+    font-weight: bold;
+    font-size: 10px;
+    text-transform: uppercase;
+    height: 36px;
+}
+.emc-table tbody tr {
+    height: 42px;
+}
+.emc-table tbody tr:nth-child(even) {
+    background: #f9fafb;
+}
+.emc-table tbody tr:hover {
+    background: #f3f4f6;
+}
+.emc-table tbody tr.otk-approved {
+    background: #d1fae5 !important;
+}
+.emc-table tbody tr.otk-pending {
+    background: #fef3c7 !important;
+}
+.emc-table input,
+.emc-table select {
+    width: 100%;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    border-radius: 3px;
+    padding: 2px 4px;
+    font-size: 11px;
+    text-align: center;
+    height: 28px;
+    line-height: 1;
+    box-sizing: border-box;
+}
+.emc-table textarea {
+    width: 100%;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    border-radius: 3px;
+    padding: 2px 4px;
+    font-size: 11px;
+    text-align: left;
+    resize: none;
+    height: 28px;
+    line-height: 1;
+    box-sizing: border-box;
+}
+.emc-table input:focus,
+.emc-table select:focus,
+.emc-table textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+}
+/* Use browser default checkbox styling */
+#emc-table input[type="checkbox"],
+.otk-checkbox {
+    width: 20px !important;
+    height: 20px !important;
+    cursor: pointer !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    accent-color: #10b981 !important;
+}
+#emc-table input[type="checkbox"]:checked,
+.otk-checkbox:checked {
+    accent-color: #10b981 !important;
+}
+.emc-table select {
+    cursor: pointer;
+}
+.emc-table input[type="number"] {
+    -moz-appearance: textfield;
+}
+.emc-table input[type="number"]::-webkit-outer-spin-button,
+.emc-table input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.btn-otk {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    cursor: pointer;
+    font-weight: 500;
+    border: 1px solid;
+}
+.btn-otk.approve {
+    background: #10b981;
+    color: white;
+    border-color: #059669;
+}
+.btn-otk.pending {
+    background: #f3f4f6;
+    color: #6b7280;
+    border-color: #d1d5db;
+}
+.btn-otk.pending:hover {
+    background: #10b981;
+    color: white;
+    border-color: #059669;
+}
+@media print {
+    @page {
+        size: A4 landscape;
+        margin: 5mm;
+    }
+    html, body {
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+    }
+    /* Скрываем всё кроме нужных элементов */
+    body > * {
+        display: none !important;
+    }
+    /* Показываем таблицу и скрытый заголовок */
+    #emc-container,
+    #emc-container *,
+    .hidden.print\:block,
+    .hidden.print\:block * {
+        display: block !important;
+    }
+    #emc-container {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: white !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+    }
+    /* Скрываем лишнее внутри контейнера */
+    .no-print,
+    .emc-tools-section {
+        display: none !important;
+    }
+    /* Улучшаем таблицу для печати */
+    .emc-table {
+        font-size: 9px !important;
+        border-collapse: collapse !important;
+    }
+    .emc-table th, .emc-table td {
+        border: 1px solid #333 !important;
+        padding: 2px 4px !important;
+        height: auto !important;
+        min-height: 20px !important;
+    }
+    .emc-table th {
+        background: #e5e5e5 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        font-weight: bold !important;
+    }
+    .emc-table input, .emc-table select, .emc-table textarea {
+        border: none !important;
+        background: transparent !important;
+        font-size: 9px !important;
+        padding: 0 !important;
+        height: auto !important;
+        line-height: 1.2 !important;
+    }
+    .emc-table input[type="checkbox"] {
+        width: 14px !important;
+        height: 14px !important;
+    }
+    /* Цвета для статусов */
+    .emc-table tbody tr.otk-approved {
+        background: #d4edda !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    .emc-table tbody tr.otk-pending {
+        background: #fff3cd !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 no-print">
+    <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            {% if current_user.role == 'otk' %}
+            <a href="/otk/cards" class="text-gray-500 hover:text-gray-700">
+                <i class="fas fa-arrow-left text-xl"></i>
+            </a>
+            {% else %}
+            <a href="/planning/plan" class="text-gray-500 hover:text-gray-700">
+                <i class="fas fa-arrow-left text-xl"></i>
+            </a>
+            {% endif %}
+            <div>
+                <h1 class="text-xl font-bold text-gray-900">Электронная маршрутная карта</h1>
+                <p class="text-sm text-gray-600" id="order-title">Загрузка...</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="/api/orders/{{ order_id }}/card/pdf" target="_blank" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition no-print">
+                <i class="fas fa-file-pdf mr-2"></i>PDF
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="p-4 sm:p-6" style="max-width: 100%; width: 100%; overflow-x: visible;">
+    <!-- Header Info -->
+    <div class="bg-white rounded-lg shadow p-4 mb-6 print-area no-print" style="width: 100%;">
+        <div class="print-header">
+            <h2>МАРШРУТНАЯ КАРТА</h2>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+            <div><span class="text-gray-500">Заказ:</span> <span class="font-semibold" id="info-order-number">-</span></div>
+            <div><span class="text-gray-500">Изделие:</span> <span class="font-semibold" id="info-designation">-</span></div>
+            <div><span class="text-gray-500">Кол-во:</span> <span class="font-semibold" id="info-quantity">-</span></div>
+            <div><span class="text-gray-500">Материал:</span> <span class="font-semibold" id="info-material">-</span></div>
+            <div><span class="text-gray-500">Статус:</span> <span class="font-semibold" id="info-status">-</span></div>
+        </div>
+    </div>
+    <!-- Print header (only visible when printing) -->
+    <div class="hidden print:block mb-4" style="display:none;">
+        <h2 class="text-lg font-bold">МАРШРУТНАЯ КАРТА</h2>
+        <p class="text-sm">Заказ: <span id="print-order-number"></span> | Изделие: <span id="print-designation"></span> | Кол-во: <span id="print-quantity"></span></p>
+    </div>
+
+    <!-- EMC Table -->
+    <div id="emc-container" class="bg-white rounded-lg shadow print-area" style="width: 100%; overflow-x: auto;">
+        <div class="hidden print:block text-center mb-4 p-2 border-b">
+            <h2 class="text-lg font-bold">МАРШРУТНАЯ КАРТА</h2>
+            <p class="text-sm">Заказ: <span id="print-order-number"></span> | Изделие: <span id="print-designation"></span> | Кол-во: <span id="print-quantity"></span></p>
+        </div>
+        <table class="emc-table" id="emc-table" style="width:100%;max-width:100%;min-width:100%;">
+            <thead>
+                <tr>
+                    <th>№</th>
+                    <th>Цех</th>
+                    <th>Операция</th>
+                    <th>Оператор</th>
+                    <th>Дата</th>
+                    <th>План</th>
+                    <th>Факт</th>
+                    <th>Брак</th>
+                    <th>Примечание</th>
+                    <th>ОТК</th>
+                </tr>
+            </thead>
+            <tbody id="operations-body">
+                <tr><td colspan="10" class="text-center py-8 text-gray-500">Загрузка операций...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Tools Section -->
+    {% if card_data.tools %}
+    <div class="emc-tools-section" style="margin-top: 16px;">
+        <div style="font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <span>🔧</span> Инструменты ({{ card_data.tools|length }})
+        </div>
+        
+        <div style="background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 8px; padding: 12px;">
+            {# Группируем инструменты по операции вручную #}
+            {% set grouped = {} %}
+            {% for tool in card_data.tools %}
+                {% set op_name = tool.operation_name if tool.operation_name else 'Без операции' %}
+                {% if op_name not in grouped %}
+                    {% if grouped.update({op_name: []}) %}{% endif %}
+                {% endif %}
+                {% set dummy = grouped[op_name].append(tool) %}
+            {% endfor %}
+            
+            {% for op_name, op_tools in grouped.items() %}
+            <div style="margin-bottom: 16px;">
+                <div style="font-weight: 600; font-size: 13px; color: #374151; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 2px solid #3b82f6;">
+                    ⚙️ {{ op_name }}
+                </div>
+                {% for tool in op_tools %}
+                <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background: white; border-radius: 6px; margin-bottom: 6px; border: 1px solid #e5e7eb;">
+                    <span style="font-weight: 600; min-width: 30px;">×{{ tool.quantity }}</span>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 500; font-size: 14px;">{{ tool.item_name }}</div>
+                        <div style="font-size: 12px; color: #666;">
+                            {% if tool.source == 'workshop' %}📍{% elif tool.source == 'main' %}🏢{% else %}👤{% endif %}
+                            {{ tool.source_name }}
+                            {% if tool.equipment_name %} · {{ tool.equipment_name }}{% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- History -->
+    <div class="mt-6 no-print">
+        <button onclick="toggleHistory()" class="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+            <i class="fas fa-history"></i>
+            <span>История изменений</span>
+            <span id="history-count" class="bg-gray-200 rounded-full px-2 py-0.5 text-xs">0</span>
+            <i class="fas fa-chevron-down" id="history-arrow"></i>
+        </button>
+        <div id="history-panel" class="hidden mt-3 bg-white rounded-lg shadow p-4">
+            <div id="history-list" class="text-sm space-y-2 max-h-64 overflow-y-auto">
+                <p class="text-gray-500">История пуста</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let orderData = null;
+let cardData = null;
+let access = {{ access | tojson }};
+
+// Используем глобальную функцию из base.html
+const formatDateShort = (dateStr) => window.formatDate(dateStr);
+const formatDate = (dateStr) => window.formatDateTime(dateStr);
+
+async function loadData() {
+    try {
+        const response = await fetch(`/api/orders/{{ order_id }}/card`);
+        const result = await response.json();
+
+        if (!result.success) {
+            alert(result.message || 'Ошибка загрузки');
+            return;
+        }
+
+        orderData = result.order;
+        cardData = result.card_data;
+        access = result.access;
+        
+        // tools returned separately in result.tools
+        console.log('=== DEBUG ===');
+        console.log('result:', result);
+        console.log('result.tools:', result.tools);
+        
+        if (result.tools && result.tools.length > 0) {
+            cardData.tools = result.tools;
+        }
+        
+        console.log('cardData after:', cardData);
+        console.log('tools:', cardData?.tools);
+
+        renderOrderInfo();
+        renderOperations();
+        renderTools();
+        renderHistory();
+    } catch (e) {
+        console.error(e);
+        alert('Ошибка загрузки данных');
+    }
+}
+
+function renderOrderInfo() {
+    document.getElementById('order-title').textContent = orderData.designation || 'Заказ';
+    document.getElementById('info-order-number').textContent = orderData.order_number ? 'ШТ-' + orderData.order_number : 'ШТ-' + orderData.id;
+    document.getElementById('info-designation').textContent = orderData.designation || '-';
+    document.getElementById('info-quantity').textContent = orderData.quantity || 1;
+    document.getElementById('info-material').textContent =
+        (orderData.mark_name || '') + (orderData.sortament_name ? ' ' + orderData.sortament_name : '');
+    document.getElementById('info-status').textContent = orderData.status || 'Запланировано';
+
+    document.getElementById('print-order-number').textContent = orderData.order_number ? 'ШТ-' + orderData.order_number : 'ШТ-' + orderData.id;
+    document.getElementById('print-designation').textContent = orderData.designation || '-';
+    document.getElementById('print-quantity').textContent = orderData.quantity || 1;
+}
+
+function renderOperations() {
+    const tbody = document.getElementById('operations-body');
+    const operations = cardData.operations || [];
+
+    if (operations.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center py-8 text-gray-500">Операции не найдены</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = operations.map((op, idx) => {
+        const rowClass = op.otk_approved ? 'otk-approved' : (op.quantity_fact > 0 ? 'otk-pending' : '');
+        const operators = op.operators || [];
+        const today = new Date().toISOString().split('T')[0];
+
+        return `
+        <tr class="${rowClass}" data-op-id="${op.operation_id}">
+            <td style="padding:4px">${op.sequence_number}</td>
+            <td style="padding:4px">${op.workshop_name || ''}</td>
+            <td style="padding:4px 2px;text-align:left">
+                <div style="font-weight:500;line-height:1.2">${op.operation_name || ''}</div>
+                <div style="font-size:10px;line-height:1.2;color:#6b7280">${op.equipment_name || ''}</div>
+            </td>
+            <td style="padding:2px">
+                ${access.can_edit ?
+                    (op.operator_fio ? 
+                        `<span style="font-size:11px;font-weight:500">${op.operator_fio}</span>` :
+                        '<span style="color:#9ca3af;font-size:11px">—</span>'
+                    ) :
+                    (op.operator_fio || '<span style="color:#9ca3af">-</span>')
+                }
+            </td>
+            <td style="padding:2px">
+                ${access.can_edit ?
+                    `<input type="date" value="${op.operation_date || ''}"
+                     max="${today}"
+                     onchange="saveField(${op.operation_id}, 'operation_date', this.value)"
+                     style="width:100%;border:1px solid #d1d5db;border-radius:3px;padding:2px;font-size:11px;height:28px;line-height:1;background:#fff;box-sizing:border-box">` :
+                    (op.operation_date || '<span style="color:#9ca3af">-</span>')
+                }
+            </td>
+            <td style="padding:2px">
+                ${access.can_edit ?
+                    `<input type="number" value="${op.quantity_plan || 0}" min="0"
+                     onchange="saveField(${op.operation_id}, 'quantity_plan', parseInt(this.value) || 0)"
+                     style="width:100%;border:1px solid #d1d5db;border-radius:3px;padding:2px;font-size:11px;height:28px;line-height:1;background:#fff;text-align:center;box-sizing:border-box">` :
+                    (op.quantity_plan || 0)
+                }
+            </td>
+            <td style="padding:2px">
+                ${access.can_edit ?
+                    `<input type="number" value="${op.quantity_fact || 0}" min="0"
+                     onchange="saveField(${op.operation_id}, 'quantity_fact', parseInt(this.value) || 0)"
+                     style="width:100%;border:1px solid #d1d5db;border-radius:3px;padding:2px;font-size:11px;height:28px;line-height:1;background:#fff;text-align:center;box-sizing:border-box">` :
+                    (op.quantity_fact || 0)
+                }
+            </td>
+            <td style="padding:2px">
+                ${access.can_edit ?
+                    `<input type="number" value="${op.defects || 0}" min="0"
+                     onchange="saveField(${op.operation_id}, 'defects', parseInt(this.value) || 0)"
+                     style="width:100%;border:1px solid #d1d5db;border-radius:3px;padding:2px;font-size:11px;height:28px;line-height:1;background:#fff;text-align:center;box-sizing:border-box">` :
+                    (op.defects || 0)
+                }
+            </td>
+            <td style="padding:2px">
+                ${access.can_edit ?
+                    `<input type="text" value="${(op.comment || '').replace(/"/g, '&quot;')}"
+                     onchange="saveField(${op.operation_id}, 'comment', this.value)"
+                     placeholder="Коммент"
+                     style="width:100%;border:1px solid #d1d5db;border-radius:3px;padding:2px;font-size:11px;height:28px;line-height:1;text-align:left;background:#fff;box-sizing:border-box">` :
+                    (op.comment ? `<span style="font-size:11px">${op.comment}</span>` : '<span style="color:#9ca3af">-</span>')
+                }
+            </td>
+            <td style="padding:2px;vertical-align:middle;text-align:center;min-width:50px;">
+                <input type="checkbox" 
+                    id="otk-${op.operation_id}" 
+                    class="otk-checkbox"
+                    ${op.otk_approved ? 'checked' : ''}
+                    onchange="console.log('Clicked! op=${op.operation_id}, checked=', this.checked); if(access.can_approve_otk){approveOTK(${op.operation_id}, this.checked)}">
+                ${op.otk_approved_at ? `<div style="font-size:8px;color:#6b7280;line-height:1;margin-top:2px">${formatDateShort(op.otk_approved_at)}</div>` : ''}
+            </td>
+        </tr>
+    `}).join('');
+}
+
+function renderTools() {
+    const tools = cardData.tools || [];
+    const existingSection = document.querySelector('.emc-tools-section');
+    
+    if (tools.length === 0) {
+        if (existingSection) existingSection.style.display = 'none';
+        return;
+    }
+    
+    if (existingSection) {
+        existingSection.style.display = 'block';
+        
+        // Группируем инструменты по операции
+        const toolsByOperation = {};
+        tools.forEach(t => {
+            const opName = t.operation_name || 'Без операции';
+            if (!toolsByOperation[opName]) {
+                toolsByOperation[opName] = [];
+            }
+            toolsByOperation[opName].push(t);
+        });
+        
+        // Рендерим HTML с группировкой по операциям
+        const container = existingSection.querySelector('div:first-child + div') || existingSection.querySelector('div:nth-child(2)');
+        if (container) {
+            let html = '';
+            for (const [opName, opTools] of Object.entries(toolsByOperation)) {
+                html += `
+                    <div style="margin-bottom: 16px;">
+                        <div style="font-weight: 600; font-size: 13px; color: #374151; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 2px solid #3b82f6;">
+                            ⚙️ ${opName}
+                        </div>
+                        ${opTools.map(t => `
+                            <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background: white; border-radius: 6px; margin-bottom: 6px; border: 1px solid #e5e7eb;">
+                                <span style="font-weight: 600; min-width: 30px;">×${t.quantity}</span>
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 500; font-size: 14px;">${t.item_name}</div>
+                                    <div style="font-size: 12px; color: #666;">
+                                        ${t.source === 'workshop' ? '📍' : (t.source === 'main' ? '🏢' : '👤')} ${t.source_name || ''}
+                                        ${t.equipment_name ? ' · ' + t.equipment_name : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            container.innerHTML = html;
+        }
+        
+        // Обновляем заголовок
+        const header = existingSection.querySelector('div:first-child');
+        if (header) header.innerHTML = '<span>🔧</span> Инструменты (' + tools.length + ')';
+    }
+}
+
+function renderHistory() {
+    const history = cardData.history || [];
+    const countEl = document.getElementById('history-count');
+    const listEl = document.getElementById('history-list');
+
+    countEl.textContent = history.length;
+
+    if (history.length === 0) {
+        listEl.innerHTML = '<p class="text-gray-500">История пуста</p>';
+        return;
+    }
+
+    const fieldNames = {
+        'operator_fio': 'ФИО оператора',
+        'operation_date': 'Дата',
+        'quantity_plan': 'План',
+        'quantity_fact': 'Факт',
+        'defects': 'Брак',
+        'comment': 'Комментарий',
+        'otk_approved': 'ОТК'
+    };
+
+    listEl.innerHTML = history.slice().reverse().map(h => `
+        <div class="border-b border-gray-100 pb-2">
+            <span class="font-medium">${h.username}</span>
+            <span class="text-gray-500">изменил(а) ${fieldNames[h.field] || h.field}:</span>
+            <span class="text-red-500">${h.old_value || 'пусто'}</span>
+            <span class="text-gray-400">→</span>
+            <span class="text-green-600">${h.new_value || 'пусто'}</span>
+            <span class="text-gray-400 text-xs ml-2">${formatDate(h.timestamp)}</span>
+        </div>
+    `).join('');
+}
+
+function toggleHistory() {
+    const panel = document.getElementById('history-panel');
+    const arrow = document.getElementById('history-arrow');
+    panel.classList.toggle('hidden');
+    arrow.classList.toggle('fa-chevron-down');
+    arrow.classList.toggle('fa-chevron-up');
+}
+
+async function saveField(operationId, field, value) {
+    try {
+        const response = await fetch(`/api/orders/{{ order_id }}/card`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({operation_id: operationId, field: field, value: value})
+        });
+        const result = await response.json();
+        if (result.success) {
+            const op = cardData.operations.find(o => o.operation_id === operationId);
+            if (op) op[field] = value;
+        } else {
+            alert(result.detail || 'Ошибка сохранения');
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Ошибка сохранения');
+    }
+}
+
+async function approveOTK(operationId, approved) {
+    try {
+        const response = await fetch(`/api/orders/{{ order_id }}/card/approve-otk`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({operation_id: operationId, approved: approved})
+        });
+        const result = await response.json();
+        if (result.success) {
+            loadData();
+        } else {
+            alert(result.detail || 'Ошибка');
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Ошибка');
+    }
+}
+
+loadData();
+</script>
+{% endblock %}

@@ -1,0 +1,568 @@
+{% extends "base.html" %}
+
+{% block title %}Диаграмма Ганта{% endblock %}
+
+{% block extra_css %}
+<style>
+.stat-card {
+    transition: transform 0.2s;
+}
+.stat-card:hover {
+    transform: translateY(-2px);
+}
+
+/* Equipment Cards */
+.equipment-card {
+    transition: all 0.3s ease;
+}
+.equipment-card:hover {
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Gantt Table */
+.gantt-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+}
+.gantt-table th, .gantt-table td {
+    border: 1px solid #e5e7eb;
+    padding: 8px 4px;
+    text-align: center;
+    font-size: 12px;
+    vertical-align: middle;
+}
+/* Пустые дни */
+.gantt-table td:not(:first-child):not(:nth-child(2)):not(.weekend):not(.has-op) {
+    background: linear-gradient(135deg, #faf5ff, #f3e8ff);
+    position: relative;
+}
+/* Дни с операциями */
+.gantt-table td.has-op {
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    overflow: visible;
+}
+.gantt-table td.has-op:hover {
+    filter: brightness(1.1);
+    box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.5);
+}
+/* Цвет бара по статусу - используется в inline стилях */
+
+/* Иконка поверх бара */
+.gantt-op-dot {
+    position: relative;
+    z-index: 2;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    border: 2px solid white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+/* Первая колонка - Станок */
+.gantt-table thead th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 100;
+    background: #1e40af;
+    color: white;
+    width: 150px;
+    min-width: 120px;
+    max-width: 200px;
+    text-align: left;
+    padding-left: 10px;
+    font-weight: 600;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.gantt-table tbody td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 50;
+    background: #f9fafb;
+    width: 150px;
+    min-width: 120px;
+    max-width: 200px;
+    text-align: left;
+    padding-left: 10px;
+    font-weight: 600;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* Вторая колонка - Загрузка */
+.gantt-table thead th:nth-child(2) {
+    background: #1e40af;
+    color: white;
+    width: 50px;
+    min-width: 50px;
+    max-width: 60px;
+    font-weight: 700;
+    font-size: 11px;
+}
+.gantt-table tbody td:nth-child(2) {
+    background: #f9fafb;
+    width: 50px;
+    min-width: 50px;
+    max-width: 60px;
+    font-weight: 700;
+    font-size: 11px;
+}
+.gantt-table th.weekend {
+    background: #dc2626;
+    color: white;
+}
+.gantt-table td.weekend {
+    background: #fef2f2;
+}
+.gantt-table td.today {
+    background: #eff6ff;
+    border: 2px solid #3b82f6;
+}
+.gantt-table td.has-op {
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.gantt-op-dot {
+    position: relative;
+    z-index: 2;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    border: 2px solid white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Progress Bars */
+.progress-bar {
+    height: 8px;
+    background: #e5e7eb;
+    border-radius: 4px;
+    overflow: hidden;
+}
+.progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+/* Tooltip */
+[data-tooltip] {
+    position: relative;
+}
+[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1f2937;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    white-space: normal;
+    max-width: 200px;
+    z-index: 50;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+[data-tooltip]:hover::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #1f2937;
+    z-index: 50;
+    pointer-events: none;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="bg-white border-b border-gray-200 px-6 py-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">
+                <i class="fas fa-chart-bar mr-2 text-green-600"></i>Диаграмма Ганта
+            </h1>
+            <p class="text-sm text-gray-500 mt-1">Загрузка оборудования — {{ month_name }}</p>
+        </div>
+        <div class="flex space-x-2">
+            {% if current_user.role == 'admin' or current_user.screen_permissions is none or 'planning' in current_user.screen_permissions %}
+            <a href="/planning/plan" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm">
+                <i class="fas fa-tasks mr-2"></i>План
+            </a>
+            {% endif %}
+            {% if current_user.role == 'admin' or current_user.screen_permissions is none or 'planning_calendar' in current_user.screen_permissions %}
+            <a href="/planning/calendar" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
+                <i class="fas fa-calendar-alt mr-2"></i>Календарь
+            </a>
+            {% endif %}
+            {% if current_user.role == 'admin' or current_user.screen_permissions is none or 'planning_gantt' in current_user.screen_permissions %}
+            <a href="/planning/gantt" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">
+                <i class="fas fa-chart-bar mr-2"></i>Ганта
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Gantt Table - FULL SCREEN WIDTH -->
+<div class="bg-white border-b border-gray-200">
+    <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-white">
+        <h3 class="font-bold text-gray-900">
+            <i class="fas fa-table mr-2 text-gray-600"></i>Таблица Ганта
+        </h3>
+        <!-- Legend -->
+        <div class="flex items-center space-x-3 text-xs">
+            <div class="flex items-center">
+                <span class="w-3 h-3 rounded-full bg-red-500 mr-1"></span>
+                <span class="text-gray-600">Срочный</span>
+            </div>
+            <div class="flex items-center">
+                <span class="w-3 h-3 rounded-full bg-blue-500 mr-1"></span>
+                <span class="text-gray-600">Запланирован</span>
+            </div>
+            <div class="flex items-center">
+                <span class="w-3 h-3 rounded-full bg-yellow-500 mr-1"></span>
+                <span class="text-gray-600">В работе</span>
+            </div>
+            <div class="flex items-center">
+                <span class="w-3 h-3 rounded-full bg-green-500 mr-1"></span>
+                <span class="text-gray-600">Завершён</span>
+            </div>
+        </div>
+    </div>
+    <div style="max-height: 60vh; overflow-x: auto; overflow-y: auto;">
+        <table class="gantt-table" style="min-width: {{ 150 + 50 + (days_in_month * 45) }}px;">
+            <thead>
+                <tr>
+                    <th style="position: sticky; left: 0; z-index: 100;">Станок</th>
+                    <th>Загрузка</th>
+                    {% for day in range(1, days_in_month + 1) %}
+                        {% set weekday = ((first_day_weekday + day - 1) % 7) %}
+                        <th class="{% if weekday >= 5 %}weekend{% endif %}">{{ day }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for load in equipment_load %}
+                {% set eq_id = load.equipment.id %}
+                {% set eq_schedule = schedule|selectattr('equipment_id', 'equalto', eq_id)|list %}
+                <tr>
+                    <td style="position: sticky; left: 0; z-index: 50;">
+                        {{ load.equipment.name }}
+                    </td>
+                    <td>
+                        {{ load.load_percent }}%
+                    </td>
+                    {% for day in range(1, days_in_month + 1) %}
+                        {% set weekday = ((first_day_weekday + day - 1) % 7) %}
+                        {% set date_str = '%04d-%02d-%02d'|format(year, month, day) %}
+                        {% set is_today = (day == now.day and month == now.month and year == now.year) %}
+
+                        {% set day_ops = [] %}
+                        {% for s in eq_schedule %}
+                            {% set s_date = s.planned_date.strftime('%Y-%m-%d') if s.planned_date is mapping else (s.planned_date|string)[:10] %}
+                            {% if s_date == date_str %}
+                                {% set _ = day_ops.append(s) %}
+                            {% endif %}
+                        {% endfor %}
+
+                        <td class="{% if weekday >= 5 %}weekend{% endif %} {% if is_today %}today{% endif %} {% if day_ops %}has-op{% endif %}"
+                            {% if day_ops %}
+                                {% set tooltip_content = day_ops|map(attribute='operation_name')|join(', ') %}
+                                data-tooltip="{{ day_ops|length }} операций: {{ tooltip_content[:100] }}"{% endif %}
+                            style="position: relative;">
+                            {% if day_ops %}
+                                {% set unique_orders = day_ops|map(attribute='order_id')|unique|list %}
+                                {% set first_op = day_ops[0] %}
+                                {% set bar_color = '#ef4444' if first_op.priority == 1 else ('#10b981' if first_op.status == 'completed' else ('#3b82f6' if first_op.status == 'in_progress' else '#f59e0b')) %}
+                                <!-- Visible bar background - FIXED SIZE -->
+                                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: calc(100% - 12px); height: calc(100% - 8px); background: {{ bar_color }}; border-radius: 4px; opacity: 0.95; box-shadow: 0 2px 6px {{ bar_color }}66;"></div>
+                                <!-- Number of operations -->
+                                {% if unique_orders|length > 1 %}
+                                    <span class="text-xs font-bold text-white drop-shadow" style="position: relative; z-index: 2;">{{ day_ops|length }}</span>
+                                {% endif %}
+                            {% else %}
+                                <!-- Purple bar for empty day -->
+                                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: calc(100% - 12px); height: calc(100% - 8px); background: #a855f7; border-radius: 4px; opacity: 0.6; box-shadow: 0 2px 4px rgba(168, 85, 247, 0.3);"></div>
+                            {% endif %}
+                        </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+                {% if not equipment_load %}
+                <tr>
+                    <td colspan="{{ 2 + days_in_month }}" class="text-center py-12 text-gray-500">
+                        <i class="fas fa-chart-bar text-4xl text-gray-300 mb-3 block"></i>
+                        Нет данных за этот месяц
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Month Navigation + Stats Cards - FULL WIDTH -->
+<div class="border-b border-gray-200 bg-gray-50">
+    <div class="px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <a href="?year={{ year if month > 1 else year - 1 }}&month={{ month - 1 if month > 1 else 12 }}"
+               class="p-2 bg-white rounded-lg hover:bg-gray-100 transition shadow-sm">
+                <i class="fas fa-chevron-left"></i>
+            </a>
+            <h2 class="text-lg font-bold text-gray-900 w-40 text-center">{{ month_name }}</h2>
+            <a href="?year={{ year if month < 12 else year + 1 }}&month={{ month + 1 if month < 12 else 1 }}"
+               class="p-2 bg-white rounded-lg hover:bg-gray-100 transition shadow-sm">
+                <i class="fas fa-chevron-right"></i>
+            </a>
+            <button onclick="goToCurrentMonth()" class="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition text-sm font-medium">
+                <i class="fas fa-calendar-day mr-1"></i>Текущий месяц
+            </button>
+        </div>
+        <div class="text-sm text-gray-600">
+            <span class="font-medium">{{ working_days }} рабочих дней</span>
+            <span class="mx-2">|</span>
+            <span class="font-medium">{{ equipment|length }} станков</span>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Cards - FULL WIDTH -->
+<div class="bg-white border-b border-gray-200">
+    <div class="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-200">
+        <div class="stat-card p-6 text-center">
+            <div class="text-4xl font-bold text-blue-600 mb-1">{{ equipment|length }}</div>
+            <div class="text-sm text-gray-500">
+                <i class="fas fa-industry mr-1"></i>Станков
+            </div>
+        </div>
+        <div class="stat-card p-6 text-center">
+            <div class="text-4xl font-bold text-green-600 mb-1">{{ in_work }}</div>
+            <div class="text-sm text-gray-500">
+                <i class="fas fa-cogs mr-1"></i>В работе
+            </div>
+        </div>
+        <div class="stat-card p-6 text-center">
+            <div class="text-4xl font-bold text-purple-600 mb-1">{{ total_orders }}</div>
+            <div class="text-sm text-gray-500">
+                <i class="fas fa-clipboard-list mr-1"></i>Заказов в плане
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Other Containers -->
+<div class="p-4 space-y-6">
+
+    <!-- Equipment Load Cards -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-4 py-3 border-b border-gray-200">
+            <h3 class="font-bold text-gray-900">
+                <i class="fas fa-industry mr-2 text-blue-600"></i>Загрузка оборудования
+            </h3>
+        </div>
+        <div class="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {% for load in equipment_load|sort(attribute='load_percent', reverse=True) %}
+            <div class="equipment-card bg-gradient-to-br from-gray-50 to-white rounded-lg p-4 border-2 {% if load.load_percent >= 80 %}border-red-200{% elif load.load_percent >= 50 %}border-orange-200{% else %}border-green-200{% endif %} hover:shadow-lg transition-all duration-200 hover:-translate-y-1">
+                <!-- Header -->
+                <div class="flex items-start justify-between mb-3">
+                    <div class="flex-1 mr-2">
+                        <h4 class="font-semibold text-gray-900 text-sm truncate" title="{{ load.equipment.name }}">
+                            <i class="fas fa-cog text-gray-400 mr-1"></i>{{ load.equipment.name }}
+                        </h4>
+                        <p class="text-xs text-gray-500 mt-0.5">{{ load.equipment.equipment_type or 'Оборудование' }}</p>
+                    </div>
+                    <div class="text-right">
+                        <span class="inline-flex items-center justify-center w-12 h-12 rounded-full {% if load.load_percent >= 80 %}bg-red-100{% elif load.load_percent >= 50 %}bg-orange-100{% else %}bg-green-100{% endif %}">
+                            <span class="text-lg font-bold {% if load.load_percent >= 80 %}text-red-600{% elif load.load_percent >= 50 %}text-orange-600{% else %}text-green-600{% endif %}">
+                                {{ load.load_percent }}%
+                            </span>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="mb-3">
+                    <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full transition-all duration-300 {% if load.load_percent >= 80 %}bg-gradient-to-r from-red-400 to-red-500{% elif load.load_percent >= 50 %}bg-gradient-to-r from-orange-400 to-orange-500{% else %}bg-gradient-to-r from-green-400 to-green-500{% endif %}"
+                             style="width: {{ [load.load_percent, 100]|min }}%;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div class="bg-white rounded px-2 py-1.5">
+                        <div class="text-gray-500">Операций</div>
+                        <div class="font-bold text-gray-900">{{ load.operations_count }}</div>
+                    </div>
+                    <div class="bg-white rounded px-2 py-1.5">
+                        <div class="text-gray-500">Минут</div>
+                        <div class="font-bold text-gray-900">{{ load.total_minutes }}</div>
+                    </div>
+                </div>
+
+                <!-- Status Badge -->
+                <div class="mt-3 text-center">
+                    {% if load.load_percent >= 80 %}
+                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>Высокая загрузка
+                    </span>
+                    {% elif load.load_percent >= 50 %}
+                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                        <i class="fas fa-minus-circle mr-1"></i>Средняя загрузка
+                    </span>
+                    {% elif load.load_percent > 0 %}
+                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <i class="fas fa-check-circle mr-1"></i>Низкая загрузка
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                        <i class="fas fa-pause-circle mr-1"></i>Не загружен
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            {% if not equipment_load %}
+            <div class="col-span-full text-center py-12 text-gray-500">
+                <i class="fas fa-chart-bar text-4xl text-gray-300 mb-3 block"></i>
+                Нет данных за этот месяц
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Load Distribution -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-4 py-3 border-b border-gray-200">
+            <h3 class="font-bold text-gray-900">
+                <i class="fas fa-chart-pie mr-2 text-purple-600"></i>Распределение загрузки
+            </h3>
+        </div>
+        <div class="p-4">
+            {% set ns = namespace(high=0, medium=0, low=0, idle=0) %}
+            {% for load in equipment_load %}
+                {% if load.load_percent >= 80 %}
+                    {% set ns.high = ns.high + 1 %}
+                {% elif load.load_percent >= 50 %}
+                    {% set ns.medium = ns.medium + 1 %}
+                {% elif load.load_percent > 0 %}
+                    {% set ns.low = ns.low + 1 %}
+                {% else %}
+                    {% set ns.idle = ns.idle + 1 %}
+                {% endif %}
+            {% endfor %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <!-- High -->
+                <div class="bg-red-50 rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center">
+                            <div class="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
+                            <span class="text-sm font-medium text-red-900">Высокая (>80%)</span>
+                        </div>
+                    </div>
+                    <div class="text-3xl font-bold text-red-600 mb-2">{{ ns.high }}</div>
+                    <div class="h-2 bg-red-200 rounded-full overflow-hidden">
+                        <div class="h-full bg-red-500" style="width: {{ (ns.high / (ns.high + ns.medium + ns.low + ns.idle) * 100) if (ns.high + ns.medium + ns.low + ns.idle) > 0 else 0 }}%;"></div>
+                    </div>
+                </div>
+
+                <!-- Medium -->
+                <div class="bg-orange-50 rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center">
+                            <div class="w-3 h-3 bg-orange-500 rounded-full mr-2"></div>
+                            <span class="text-sm font-medium text-orange-900">Средняя (50-80%)</span>
+                        </div>
+                    </div>
+                    <div class="text-3xl font-bold text-orange-600 mb-2">{{ ns.medium }}</div>
+                    <div class="h-2 bg-orange-200 rounded-full overflow-hidden">
+                        <div class="h-full bg-orange-500" style="width: {{ (ns.medium / (ns.high + ns.medium + ns.low + ns.idle) * 100) if (ns.high + ns.medium + ns.low + ns.idle) > 0 else 0 }}%;"></div>
+                    </div>
+                </div>
+
+                <!-- Low -->
+                <div class="bg-green-50 rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center">
+                            <div class="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                            <span class="text-sm font-medium text-green-900">Низкая (<50%)</span>
+                        </div>
+                    </div>
+                    <div class="text-3xl font-bold text-green-600 mb-2">{{ ns.low }}</div>
+                    <div class="h-2 bg-green-200 rounded-full overflow-hidden">
+                        <div class="h-full bg-green-500" style="width: {{ (ns.low / (ns.high + ns.medium + ns.low + ns.idle) * 100) if (ns.high + ns.medium + ns.low + ns.idle) > 0 else 0 }}%;"></div>
+                    </div>
+                </div>
+
+                <!-- Idle -->
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center">
+                            <div class="w-3 h-3 bg-gray-400 rounded-full mr-2"></div>
+                            <span class="text-sm font-medium text-gray-900">Не загружены</span>
+                        </div>
+                    </div>
+                    <div class="text-3xl font-bold text-gray-600 mb-2">{{ ns.idle }}</div>
+                    <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div class="h-full bg-gray-400" style="width: {{ (ns.idle / (ns.high + ns.medium + ns.low + ns.idle) * 100) if (ns.high + ns.medium + ns.low + ns.idle) > 0 else 0 }}%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            {% if equipment_load %}
+            <div class="pt-4 border-t border-gray-200 grid grid-cols-3 gap-4">
+                <div class="text-center">
+                    <div class="text-sm text-gray-600 mb-1">Средняя загрузка</div>
+                    <div class="text-2xl font-bold text-gray-900">
+                        {% set total_percent = namespace(val=0) %}
+                        {% set count = namespace(val=0) %}
+                        {% for load in equipment_load %}
+                            {% set total_percent.val = total_percent.val + load.load_percent %}
+                            {% set count.val = count.val + 1 %}
+                        {% endfor %}
+                        {{ (total_percent.val / count.val)|round(1) if count.val > 0 else 0 }}%
+                    </div>
+                </div>
+                <div class="text-center">
+                    <div class="text-sm text-gray-600 mb-1">Рабочих дней</div>
+                    <div class="text-2xl font-bold text-gray-900">{{ working_days }}</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-sm text-gray-600 mb-1">Всего оборудования</div>
+                    <div class="text-2xl font-bold text-gray-900">{{ equipment|length }}</div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function goToCurrentMonth() {
+    const now = new Date();
+    location.href = `?year=${now.getFullYear()}&month=${now.getMonth() + 1}`;
+}
+</script>
+
+{% endblock %}
+
+{% block extra_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', path='js/planning.js') }}"></script>
+{% endblock %}

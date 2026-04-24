@@ -1,0 +1,484 @@
+{% extends "base.html" %}
+
+{% block title %}Материал{% endblock %}
+
+{% block content %}
+<div x-data="materialsApp()" class="h-full flex flex-col">
+
+    <!-- Header -->
+    <div class="bg-white border-b border-gray-200 px-4 sm:px-6 py-4">
+        <div class="flex items-center justify-between">
+            <h1 class="text-xl sm:text-2xl font-bold text-gray-900">
+                <i class="fas fa-layer-group mr-2 text-blue-600"></i>Материал
+            </h1>
+            <button @click="openAddModal()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                <i class="fas fa-plus mr-2"></i>Добавить материал
+            </button>
+        </div>
+    </div>
+
+    <!-- Search -->
+    <div class="bg-white border-b border-gray-200 px-4 sm:px-6 py-3">
+        <div class="relative">
+            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+            <input type="text" x-model="searchQuery" @input="filterMaterials()"
+                   placeholder="Поиск по сортаменту, марке, размерам..."
+                   class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-gray-900">
+        </div>
+    </div>
+
+    <!-- Materials List -->
+    <div class="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div class="space-y-3 w-full">
+        <template x-if="!filteredGroupedMaterials || Object.keys(filteredGroupedMaterials).length === 0">
+            <div class="text-center py-12 text-gray-500">
+                <i class="fas fa-layer-group text-5xl mb-3 text-gray-300"></i>
+                <p class="text-lg mb-2">Материалы не найдены</p>
+                <p class="text-sm text-gray-400">Нажмите "Добавить материал" чтобы создать первый</p>
+            </div>
+        </template>
+
+        <!-- Hierarchical list -->
+        <template x-for="(marks, sortament) in filteredGroupedMaterials" :key="sortament">
+            <div class="sortament-group">
+                <!-- Sortament Header -->
+                <div class="bg-gray-100 rounded-lg px-4 py-2 mb-2 cursor-pointer"
+                     @click="toggleSortament(sortament)">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <i class="fas fa-chevron-right text-sm text-gray-500 transition-transform"
+                               :class="{'rotate-90': !!expandedSortaments[sortament]}"></i>
+                            <span class="ml-2 font-semibold text-gray-800" x-text="sortament"></span>
+                        </div>
+                        <span class="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded-full"
+                              x-text="Object.values(marks).flat().length + ' поз.'"></span>
+                    </div>
+                </div>
+
+                <!-- Marks -->
+                <div x-show="!!expandedSortaments[sortament]"
+                     x-transition:enter="transition ease-out duration-200"
+                     x-transition:enter-start="opacity-0"
+                     x-transition:enter-end="opacity-100"
+                     class="ml-4 space-y-2">
+                    <template x-for="(instances, mark) in marks" :key="mark">
+                        <div class="mark-group">
+                            <!-- Mark Header -->
+                            <div class="bg-blue-50 rounded-lg px-3 py-1.5 cursor-pointer"
+                                 @click="toggleMark(sortament + '|' + mark)">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center">
+                                        <i class="fas fa-chevron-right text-xs text-blue-400 transition-transform"
+                                           :class="{'rotate-90': !!expandedMarks[sortament + '|' + mark]}"></i>
+                                        <span class="ml-2 font-medium text-blue-800" x-text="mark"></span>
+                                    </div>
+                                    <span class="text-xs text-blue-500 bg-blue-100 px-2 py-0.5 rounded-full"
+                                          x-text="instances.length + ' шт.'"></span>
+                                </div>
+                            </div>
+
+                            <!-- Instances -->
+                            <div x-show="!!expandedMarks[sortament + '|' + mark]"
+                                 x-transition:enter="transition ease-out duration-200"
+                                 x-transition:enter-start="opacity-0"
+                                 x-transition:enter-end="opacity-100"
+                                 class="ml-4 mt-1 space-y-1">
+                                <template x-for="(item, idx) in instances" :key="item.id">
+                                    <div class="bg-white border border-gray-200 rounded-lg px-3 py-2 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-center gap-2 flex-wrap">
+                                                <!-- Dimensions -->
+                                                <span class="text-sm font-medium text-gray-900" x-text="formatDimensions(item)"></span>
+                                                <!-- GOST markers if present -->
+                                                <template x-if="item.mark_gost || item.sortament_gost">
+                                                    <span class="text-xs text-gray-400">
+                                                        <span x-show="item.mark_gost" x-text="'(' + item.mark_gost + ')'"></span>
+                                                        <span x-show="item.sortament_gost"> — <span x-text="item.sortament_gost"></span></span>
+                                                    </span>
+                                                </template>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-1 flex-shrink-0">
+                                            <button @click="openEditModal(item)"
+                                                    class="p-1.5 rounded hover:bg-gray-100 transition-colors"
+                                                    title="Редактировать">
+                                                <i class="fas fa-edit text-green-600 text-sm"></i>
+                                            </button>
+                                            <button @click="confirmDelete(item)"
+                                                    class="p-1.5 rounded hover:bg-gray-100 transition-colors"
+                                                    title="Удалить">
+                                                <i class="fas fa-trash text-red-500 text-sm"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </template>
+        </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div x-show="showModal"
+         x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+         x-transition:opacity>
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md mx-4"
+             @click.stop>
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900" x-text="editingId ? 'Редактировать материал' : 'Добавить материал'"></h3>
+            </div>
+
+            <form @submit.prevent="saveMaterial()" class="p-6 space-y-4">
+                <!-- Sortament -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Сортамент *</label>
+                    <input type="text" x-model="form.sortament_name" required
+                           list="sortaments-list"
+                           placeholder="Круг, Лист, Труба..."
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-gray-900">
+                    <datalist id="sortaments-list">
+                        <template x-for="s in sortamentSuggestions" :key="s">
+                            <option :value="s"></option>
+                        </template>
+                    </datalist>
+                </div>
+
+                <!-- Sortament GOST -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">ГОСТ сортамента</label>
+                    <input type="text" x-model="form.sortament_gost"
+                           placeholder="ГОСТ 2590-2006"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-gray-900">
+                </div>
+
+                <!-- Mark -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Марка *</label>
+                    <input type="text" x-model="form.mark_name" required
+                           list="marks-list"
+                           placeholder="Ст20, 09Г2С, Д16Т..."
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-gray-900">
+                    <datalist id="marks-list">
+                        <template x-for="m in markSuggestions" :key="m">
+                            <option :value="m"></option>
+                        </template>
+                    </datalist>
+                </div>
+
+                <!-- Mark GOST -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">ГОСТ марки</label>
+                    <input type="text" x-model="form.mark_gost"
+                           placeholder="ГОСТ 1050-88"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-gray-900">
+                </div>
+
+                <!-- Dimensions -->
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Размер 1, мм</label>
+                        <input type="number" step="0.01" x-model="form.dim1"
+                               placeholder="50"
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-gray-900">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Размер 2, мм</label>
+                        <input type="number" step="0.01" x-model="form.dim2"
+                               placeholder="30"
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-gray-900">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Размер 3, мм</label>
+                        <input type="number" step="0.01" x-model="form.dim3"
+                               placeholder="10"
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-gray-900">
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex gap-3 justify-end pt-2">
+                    <button type="button" @click="closeModal()"
+                            class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 text-sm font-medium transition-colors">
+                        Отмена
+                    </button>
+                    <button type="submit"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors">
+                        <i class="fas fa-save mr-2"></i>Сохранить
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div x-show="showDeleteModal"
+         x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+         x-transition:opacity>
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6"
+             @click.stop>
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">Подтверждение удаления</h3>
+            <p class="text-sm text-gray-600 mb-4">
+                Вы уверены, что хотите удалить материал "<span x-text="deleteItemName"></span>"? Это действие необратимо.</p>
+            <div class="flex gap-3 justify-end">
+                <button @click="showDeleteModal = false"
+                        class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 text-sm font-medium transition-colors">
+                    Отмена
+                </button>
+                <button @click="deleteMaterial()"
+                        class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium transition-colors">
+                    <i class="fas fa-trash mr-2"></i>Удалить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function materialsApp() {
+    return {
+        // Data from server
+        groupedMaterials: {{ grouped_materials | tojson }},
+
+        // Filtered data (computed from search)
+        filteredGroupedMaterials: {},
+        searchQuery: '',
+
+        // UI State
+        showModal: false,
+        showDeleteModal: false,
+        editingId: null,
+        deleteItemId: null,
+        deleteItemName: '',
+
+        // Form data
+        form: {
+            sortament_name: '',
+            sortament_gost: '',
+            mark_name: '',
+            mark_gost: '',
+            dim1: '',
+            dim2: '',
+            dim3: '',
+        },
+
+        // Expanded state (using objects for better reactivity)
+        expandedSortaments: {},
+        expandedMarks: {},
+
+        // Suggestions for autocomplete
+        sortamentSuggestions: [],
+        markSuggestions: [],
+
+        init() {
+            // Build suggestions from data
+            this.buildSuggestions();
+            // Initialize filtered data
+            this.filteredGroupedMaterials = this.groupedMaterials;
+            // Expand first sortament and mark by default - delay to ensure Alpine is ready
+            setTimeout(() => {
+                this.expandFirstByDefault();
+            }, 0);
+        },
+
+        buildSuggestions() {
+            const sortaments = new Set();
+            const marks = new Set();
+            for (const [sortament, marksObj] of Object.entries(this.groupedMaterials)) {
+                sortaments.add(sortament);
+                for (const mark of Object.keys(marksObj)) {
+                    marks.add(mark);
+                }
+            }
+            this.sortamentSuggestions = Array.from(sortaments).sort();
+            this.markSuggestions = Array.from(marks).sort();
+        },
+
+        expandFirstByDefault() {
+            const sortaments = Object.keys(this.filteredGroupedMaterials);
+            if (sortaments.length > 0) {
+                const firstSortament = sortaments[0];
+                this.expandedSortaments[firstSortament] = true;
+                const marks = Object.keys(this.filteredGroupedMaterials[firstSortament]);
+                if (marks.length > 0) {
+                    this.expandedMarks[firstSortament + '|' + marks[0]] = true;
+                }
+            }
+        },
+
+        toggleSortament(sortament) {
+            this.expandedSortaments[sortament] = !this.expandedSortaments[sortament];
+            // Force reactivity update
+            this.expandedSortaments = {...this.expandedSortaments};
+        },
+
+        toggleMark(key) {
+            this.expandedMarks[key] = !this.expandedMarks[key];
+            // Force reactivity update
+            this.expandedMarks = {...this.expandedMarks};
+        },
+
+        filterMaterials() {
+            const query = this.searchQuery.toLowerCase().trim();
+            if (!query) {
+                this.filteredGroupedMaterials = this.groupedMaterials;
+                this.expandedSortaments = {};
+                this.expandedMarks = {};
+                setTimeout(() => this.expandFirstByDefault(), 0);
+                return;
+            }
+
+            const result = {};
+            for (const [sortament, marksObj] of Object.entries(this.groupedMaterials)) {
+                const filteredMarks = {};
+                for (const [mark, instances] of Object.entries(marksObj)) {
+                    const filteredInstances = instances.filter(inst => {
+                        const dimMatch = this.formatDimensions(inst).toLowerCase().includes(query);
+                        return dimMatch;
+                    });
+
+                    if (filteredInstances.length > 0) {
+                        filteredMarks[mark] = filteredInstances;
+                    }
+                }
+                if (Object.keys(filteredMarks).length > 0) {
+                    result[sortament] = filteredMarks;
+                }
+            }
+            this.filteredGroupedMaterials = result;
+
+            // Auto-expand all when searching
+            if (query) {
+                this.expandedSortaments = {};
+                this.expandedMarks = {};
+                for (const sortament of Object.keys(this.filteredGroupedMaterials)) {
+                    this.expandedSortaments[sortament] = true;
+                    for (const mark of Object.keys(this.filteredGroupedMaterials[sortament])) {
+                        this.expandedMarks[sortament + '|' + mark] = true;
+                    }
+                }
+                // Force reactivity
+                this.expandedSortaments = {...this.expandedSortaments};
+                this.expandedMarks = {...this.expandedMarks};
+            }
+        },
+
+        formatDimensions(item) {
+            const parts = [];
+            if (item.dimension1 != null) parts.push(item.dimension1);
+            if (item.dimension2 != null) parts.push(item.dimension2);
+            if (item.dimension3 != null) parts.push(item.dimension3);
+
+            if (parts.length === 0) return '—';
+
+            // Format numbers nicely (remove .0 for integers)
+            const formatted = parts.map(p => {
+                if (p == null) return '';
+                return Number.isInteger(p) ? p.toString() : p.toFixed(2);
+            });
+
+            return formatted.join(' × ');
+        },
+
+        openAddModal() {
+            this.editingId = null;
+            this.form = {
+                sortament_name: '',
+                sortament_gost: '',
+                mark_name: '',
+                mark_gost: '',
+                dim1: '',
+                dim2: '',
+                dim3: '',
+            };
+            this.showModal = true;
+        },
+
+        openEditModal(item) {
+            this.editingId = item.id;
+            this.form = {
+                sortament_name: item.sortament_name || '',
+                sortament_gost: item.sortament_gost || '',
+                mark_name: item.mark_name || '',
+                mark_gost: item.mark_gost || '',
+                dim1: item.dimension1 || '',
+                dim2: item.dimension2 || '',
+                dim3: item.dimension3 || '',
+            };
+            this.showModal = true;
+        },
+
+        closeModal() {
+            this.showModal = false;
+            this.editingId = null;
+        },
+
+        async saveMaterial() {
+            const url = this.editingId
+                ? `/materials/${this.editingId}`
+                : '/materials/create';
+
+            const formData = new FormData();
+            formData.append('sortament_name', this.form.sortament_name);
+            formData.append('sortament_gost', this.form.sortament_gost || '');
+            formData.append('mark_name', this.form.mark_name);
+            formData.append('mark_gost', this.form.mark_gost || '');
+            formData.append('dim1', this.form.dim1 || '');
+            formData.append('dim2', this.form.dim2 || '');
+            formData.append('dim3', this.form.dim3 || '');
+
+            try {
+                const response = await fetch(url, {
+                    method: this.editingId ? 'PUT' : 'POST',
+                    body: formData,
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    this.closeModal();
+                    // Reload page to get updated data
+                    window.location.reload();
+                } else {
+                    alert('Ошибка: ' + (data.message || 'Не удалось сохранить материал'));
+                }
+            } catch (e) {
+                alert('Ошибка: ' + e.message);
+            }
+        },
+
+        confirmDelete(item) {
+            this.deleteItemId = item.id;
+            this.deleteItemName = item.mark_name + ' ' + (item.sortament_name || '') + ' ' + this.formatDimensions(item);
+            this.showDeleteModal = true;
+        },
+
+        async deleteMaterial() {
+            try {
+                const response = await fetch(`/materials/${this.deleteItemId}`, {
+                    method: 'DELETE',
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    this.showDeleteModal = false;
+                    // Reload page to get updated data
+                    window.location.reload();
+                } else {
+                    alert('Ошибка: ' + (data.message || 'Не удалось удалить материал'));
+                }
+            } catch (e) {
+                alert('Ошибка: ' + e.message);
+            }
+        },
+    };
+}
+</script>
+{% endblock %}

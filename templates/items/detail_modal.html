@@ -1,0 +1,93 @@
+<!-- Modal Backdrop -->
+<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+     x-data="{ open: true }"
+     x-show="open"
+     x-transition
+     @click.self="open = false; setTimeout(() => $el.remove(), 300)">
+
+    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <!-- Modal Header -->
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h2 class="text-xl font-bold text-gray-900">{{ item.name }}</h2>
+            <button @click="open = false; setTimeout(() => $el.closest('.fixed').remove(), 300)"
+                    class="text-gray-400 hover:text-gray-600text-gray-300">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="p-6">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <p class="text-sm text-gray-600">ID товара</p>
+                    <p class="text-lg font-semibold text-gray-900">{{ item.item_id }}</p>
+                </div>
+
+                <div>
+                    <p class="text-sm text-gray-600">Категория</p>
+                    <p class="text-lg font-semibold text-gray-900">{{ item.category or '-' }}</p>
+                </div>
+
+                <div>
+                    <p class="text-sm text-gray-600">Количество</p>
+                    <p class="text-2xl font-bold {% if item.quantity <= item.min_stock %}text-red-600{% else %}text-green-600{% endif %}">
+                        {{ item.quantity }}
+                    </p>
+                </div>
+
+                <div>
+                    <p class="text-sm text-gray-600">Мин. остаток</p>
+                    <p class="text-lg font-semibold text-gray-900">{{ item.min_stock }}</p>
+                </div>
+
+                <div>
+                    <p class="text-sm text-gray-600">Местоположение</p>
+                    <p class="text-lg font-semibold text-gray-900">{{ item.location or '-' }}</p>
+                </div>
+
+                {% if item.shop_url %}
+                <div>
+                    <p class="text-sm text-gray-600">Ссылка на магазин</p>
+                    <a href="{{ item.shop_url }}" target="_blank" class="text-blue-600 hover:underline">
+                        <i class="fas fa-external-link-alt mr-1"></i>Открыть
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+
+            {% if item.specifications and item.specifications != '{}' %}
+            <div class="mt-6 pt-4 border-t border-gray-200">
+                <h3 class="font-semibold text-gray-900 mb-3">Характеристики</h3>
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <pre class="text-sm text-gray-700">{{ item.specifications }}</pre>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Actions -->
+            <div class="mt-6 pt-4 border-t border-gray-200 flex space-x-3">
+                <button hx-get="/items/{{ item.item_id }}/edit"
+                        hx-target="#modal-container"
+                        class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700bg-blue-600">
+                    <i class="fas fa-edit mr-2"></i>Редактировать
+                </button>
+                {% if current_user and current_user.role == 'admin' %}
+                <button hx-post="/items/{{ item.item_id }}/delete"
+                        hx-swap="none"
+                        @click="if(confirm('Удалить этот товар?')) { $el.closest('form')?.submit() || window.location='/items/{{ item.item_id }}/delete' }"
+                        class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700bg-red-600">
+                    <i class="fas fa-trash"></i>
+                </button>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="px-6 py-4 border-t border-gray-200 flex justify-end">
+            <button @click="open = false; setTimeout(() => $el.closest('.fixed').remove(), 300)"
+                    class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
+                Закрыть
+            </button>
+        </div>
+    </div>
+</div>

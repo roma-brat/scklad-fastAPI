@@ -1,0 +1,751 @@
+{% extends "mobile/base.html" %}
+
+{% block title %}QR Сканер — Склад{% endblock %}
+
+{% block content %}
+<div class="qr-scanner-page">
+    <!-- Header -->
+    <div class="header">
+        <div class="header-row">
+            <button class="btn-back" onclick="window.location.href='/mobile/my_page'">← Назад</button>
+            <h1>📷 QR Сканер</h1>
+        </div>
+        <p class="header-subtitle">Сканируйте QR-коды производственных заказов</p>
+    </div>
+
+    <!-- Scanner Section -->
+    <div id="scanner-section">
+        <div id="qr-reader"></div>
+        <p class="scan-hint">Наведите камеру на QR-код</p>
+    </div>
+
+    <!-- Manual Input Section -->
+    <div class="manual-input-section">
+        <details>
+            <summary>📝 Ручной ввод URL</summary>
+            <div class="manual-input-content">
+                <input
+                    type="text"
+                    id="manual-url-input"
+                    placeholder="sklad://order/123?route=456"
+                >
+                <button class="btn-primary" onclick="handleManualInput()">Обработать</button>
+            </div>
+        </details>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loading" class="loading-indicator" style="display:none">
+        <div class="spinner"></div>
+        <p>Обработка...</p>
+    </div>
+
+    <!-- Result Section -->
+    <div id="result-section" style="display:none">
+        <!-- Order Info Card -->
+        <div class="card order-card">
+            <div class="card-header">
+                <h2>📋 Заказ <span id="order-id"></span></h2>
+                <span id="status-badge" class="status-badge"></span>
+            </div>
+            <div class="order-details">
+                <div class="detail-row">
+                    <span class="detail-label">Обозначение:</span>
+                    <span id="order-designation" class="detail-value"></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Деталь:</span>
+                    <span id="order-detail" class="detail-value"></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Количество:</span>
+                    <span id="order-quantity" class="detail-value"></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Тип производства:</span>
+                    <span id="order-type" class="detail-value"></span>
+                </div>
+                <div class="detail-row" id="batch-row" style="display:none">
+                    <span class="detail-label">Партия:</span>
+                    <span id="order-batch" class="detail-value"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Route Info Card -->
+        <div id="route-card" class="card route-card" style="display:none">
+            <div class="card-header">
+                <h2>🔧 Маршрут <span id="route-id"></span></h2>
+            </div>
+            <div class="route-details">
+                <div class="detail-row">
+                    <span class="detail-label">Обозначение:</span>
+                    <span id="route-designation" class="detail-value"></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Деталь:</span>
+                    <span id="route-detail" class="detail-value"></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Операций:</span>
+                    <span id="route-operations" class="detail-value"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Card -->
+        <div id="stats-card" class="card stats-card" style="display:none">
+            <div class="card-header">
+                <h2>📊 Статистика</h2>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-label">Прогресс</div>
+                    <div class="stat-value" id="stat-progress"></div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Операций</div>
+                    <div class="stat-value" id="stat-operations"></div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Ср. время/ед.</div>
+                    <div class="stat-value" id="stat-avg-time"></div>
+                </div>
+            </div>
+            <!-- Progress Bar -->
+            <div class="progress-bar-container">
+                <div id="progress-bar" class="progress-bar"></div>
+            </div>
+        </div>
+
+        <!-- Schedule List -->
+        <div id="schedule-card" class="card schedule-card" style="display:none">
+            <div class="card-header">
+                <h2>📝 Операции</h2>
+            </div>
+            <div id="schedule-list" class="schedule-list"></div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div id="action-buttons" class="action-buttons-container">
+            <button id="btn-take" class="btn-action btn-take-order" style="display:none" onclick="takeOrder()">
+                ✓ Взять в работу
+            </button>
+            <button id="btn-complete" class="btn-action btn-complete-order" style="display:none" onclick="completeOrder()">
+                ✓✓ Завершить
+            </button>
+            <button id="btn-rescan" class="btn-action btn-rescan" onclick="resetScanner()">
+                🔄 Сканировать другой
+            </button>
+        </div>
+    </div>
+
+    <!-- Error Message -->
+    <div id="error-message" class="error-message" style="display:none"></div>
+</div>
+
+<!-- Toast Notification -->
+<div id="toast" class="toast"></div>
+
+<!-- Dialog Overlay -->
+<div id="dialog-overlay" class="dialog-overlay" style="display:none">
+    <div id="dialog-content" class="dialog-content"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ============================================================
+// QR Scanner Page Logic
+// ============================================================
+
+let html5QrcodeScanner = null;
+let currentOrderData = null;
+let currentRouteData = null;
+let isScanning = true;
+
+// Initialize scanner on page load
+document.addEventListener('DOMContentLoaded', function() {
+    initQRScanner();
+});
+
+// ============================================================
+// QR Code Scanner using html5-qrcode library
+// ============================================================
+
+function initQRScanner() {
+    const qrReader = document.getElementById('qr-reader');
+    if (!qrReader) return;
+
+    // Clear any previous scanner
+    qrReader.innerHTML = '';
+
+    try {
+        html5QrcodeScanner = new Html5QrcodeScanner(
+            "qr-reader",
+            {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0,
+                showTorchButton: true,
+            },
+            /* verbose= */ false
+        );
+
+        html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+    } catch (error) {
+        console.error('QR Scanner init error:', error);
+        document.getElementById('qr-reader').innerHTML =
+            '<p style="text-aligncenter;padding:20px;color:#c62828;">❌ Ошибка инициализации камеры.<br>Разрешите доступ к камере или используйте ручной ввод.</p>';
+    }
+}
+
+function onScanSuccess(decodedText, decodedResult) {
+    if (!isScanning) return;
+
+    // Stop scanning after successful scan
+    isScanning = false;
+    if (html5QrcodeScanner) {
+        html5QrcodeScanner.clear().catch(err => console.log('Scanner clear error:', err));
+    }
+
+    // Show loading
+    showLoading(true);
+    hideError();
+
+    // Process the scanned URL
+    processQRUrl(decodedText);
+}
+
+function onScanFailure(error) {
+    // This is called frequently when no QR code is detected - ignore
+    // console.warn('QR scan failure:', error);
+}
+
+// ============================================================
+// Manual Input Handler
+// ============================================================
+
+function handleManualInput() {
+    const manualUrl = document.getElementById('manual-url-input').value.trim();
+    if (!manualUrl) {
+        showError('Введите URL из QR-кода');
+        return;
+    }
+
+    showLoading(true);
+    hideError();
+    processQRUrl(manualUrl);
+}
+
+// ============================================================
+// Process QR URL
+// ============================================================
+
+async function processQRUrl(url) {
+    try {
+        const formData = new FormData();
+        formData.append('scan_url', url);
+
+        const response = await fetch('/mobile/api/qr/scan', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const data = await response.json();
+
+        showLoading(false);
+
+        if (!data.success) {
+            showError(data.error || 'Неверный формат QR-кода');
+            resetScanner();
+            return;
+        }
+
+        displayResult(data);
+    } catch (error) {
+        showLoading(false);
+        showError('Ошибка сети: ' + error.message);
+        resetScanner();
+    }
+}
+
+// ============================================================
+// Display Result
+// ============================================================
+
+function displayResult(data) {
+    const order = data.order;
+    const status = data.status;
+    const routeInfo = data.route_info;
+
+    currentOrderData = order;
+    currentRouteData = routeInfo;
+
+    // Hide scanner, show result
+    document.getElementById('scanner-section').style.display = 'none';
+    document.getElementById('result-section').style.display = 'block';
+
+    // Fill order info
+    document.getElementById('order-id').textContent = `#${order.id}`;
+    document.getElementById('order-designation').textContent = order.designation || '—';
+    document.getElementById('order-detail').textContent = order.detail_name || '—';
+    document.getElementById('order-quantity').textContent = order.quantity || '—';
+    document.getElementById('order-type').textContent = order.production_type_display || '—';
+
+    // Status badge
+    const statusBadge = document.getElementById('status-badge');
+    statusBadge.textContent = order.status_display || 'Запланирован';
+    statusBadge.className = 'status-badge status-' + (order.status || 'planned');
+
+    // Batch number
+    if (order.batch_number) {
+        document.getElementById('batch-row').style.display = 'flex';
+        document.getElementById('order-batch').textContent = order.batch_number;
+    }
+
+    // Route info
+    if (routeInfo && routeInfo.success) {
+        document.getElementById('route-card').style.display = 'block';
+        document.getElementById('route-id').textContent = `#${routeInfo.id}`;
+        document.getElementById('route-designation').textContent = routeInfo.designation || '—';
+        document.getElementById('route-detail').textContent = routeInfo.detail_name || '—';
+        document.getElementById('route-operations').textContent = routeInfo.operations_count || '—';
+    } else {
+        document.getElementById('route-card').style.display = 'none';
+    }
+
+    // Statistics
+    if (status && status.success) {
+        document.getElementById('stats-card').style.display = 'block';
+        document.getElementById('stat-progress').textContent = status.progress_percent + '%';
+        document.getElementById('stat-operations').textContent =
+            `${status.completed_operations}/${status.total_operations}`;
+
+        const avgTime = status.avg_time_per_unit_minutes;
+        document.getElementById('stat-avg-time').textContent =
+            avgTime ? formatTime(avgTime * 60) : '—';
+
+        // Progress bar
+        const progressBar = document.getElementById('progress-bar');
+        progressBar.style.width = status.progress_percent + '%';
+
+        // Update progress bar color based on completion
+        if (status.progress_percent >= 100) {
+            progressBar.classList.add('progress-complete');
+        } else if (status.progress_percent > 0) {
+            progressBar.classList.add('progress-in-progress');
+        }
+    } else {
+        document.getElementById('stats-card').style.display = 'none';
+    }
+
+    // Schedule list
+    if (data.schedule && data.schedule.length > 0) {
+        displaySchedule(data.schedule);
+        document.getElementById('schedule-card').style.display = 'block';
+    } else {
+        document.getElementById('schedule-card').style.display = 'none';
+    }
+
+    // Action buttons based on order status
+    updateActionButtons(order);
+
+    showToast('✅ QR-код успешно обработан', 'success');
+}
+
+// ============================================================
+// Display Schedule Operations
+// ============================================================
+
+function displaySchedule(schedule) {
+    const container = document.getElementById('schedule-list');
+    container.innerHTML = '';
+
+    // Sort by sequence number
+    schedule.sort((a, b) => (a.sequence_number || 0) - (b.sequence_number || 0));
+
+    schedule.forEach((item, index) => {
+        const div = document.createElement('div');
+        div.className = 'schedule-item ' + getItemStatusClass(item);
+
+        let statusIcon = '⏳';
+        let statusText = 'Запланирована';
+
+        if (item.is_completed) {
+            statusIcon = '✅';
+            statusText = 'Завершена';
+        } else if (item.is_taken) {
+            statusIcon = '🔄';
+            statusText = 'В работе';
+        }
+
+        div.innerHTML = `
+            <div class="schedule-item-header">
+                <div class="schedule-seq">${index + 1}</div>
+                <div class="schedule-item-info">
+                    <div class="schedule-item-name">${statusIcon} ${item.operation_name || 'Без названия'}</div>
+                    <div class="schedule-item-equipment">🔧 ${item.equipment_name || '—'}</div>
+                </div>
+                <div class="schedule-item-status">${statusText}</div>
+            </div>
+            ${item.taken_at ? `
+                <div class="schedule-item-details">
+                    <div>Взята: ${item.taken_at}${item.taken_by ? ' (' + item.taken_by + ')' : ''}</div>
+                    ${item.completed_at ? `<div>Завершена: ${item.completed_at}${item.completed_by ? ' (' + item.completed_by + ')' : ''}</div>` : ''}
+                    ${item.avg_time_per_unit ? `<div>Ср. время/ед ${formatTime(item.avg_time_per_unit)}</div>` : ''}
+                </div>
+            ` : ''}
+        `;
+
+        container.appendChild(div);
+    });
+}
+
+function getItemStatusClass(item) {
+    if (item.is_completed) return 'status-completed';
+    if (item.is_taken) return 'status-taken';
+    return 'status-planned';
+}
+
+// ============================================================
+// Action Buttons
+// ============================================================
+
+function updateActionButtons(order) {
+    const btnTake = document.getElementById('btn-take');
+    const btnComplete = document.getElementById('btn-complete');
+
+    // Reset
+    btnTake.style.display = 'none';
+    btnComplete.style.display = 'none';
+
+    if (order.in_progress) {
+        // Order is in progress - show complete button
+        btnComplete.style.display = 'block';
+    } else if (order.status === 'completed') {
+        // Order is already completed - no action buttons needed
+        showToast('ℹ️ Заказ уже завершён', 'info');
+    } else {
+        // Order is planned - show take button
+        btnTake.style.display = 'block';
+    }
+}
+
+// ============================================================
+// Take Order
+// ============================================================
+
+async function takeOrder() {
+    if (!currentOrderData) return;
+
+    if (!confirm('Взять заказ #' + currentOrderData.id + ' в работу?')) {
+        return;
+    }
+
+    showLoading(true);
+
+    try {
+        const formData = new FormData();
+        formData.append('order_id', currentOrderData.id);
+        if (currentRouteData && currentRouteData.id) {
+            formData.append('route_id', currentRouteData.id);
+        }
+
+        const response = await fetch('/mobile/api/qr/take-order', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const data = await response.json();
+        showLoading(false);
+
+        if (!data.success) {
+            showToast('❌ ' + (data.error || 'Ошибка'), 'error');
+            return;
+        }
+
+        showToast('✅ ' + data.message, 'success');
+
+        // После успешного взятия заказа показать выбор инструментов
+        if (data.order) {
+            const toolsResponse = await fetch('/mobile/api/user/available-tools');
+            const toolsData = await toolsResponse.json();
+
+            if (toolsData.success && toolsData.tools && toolsData.tools.length > 0) {
+                showToolSelectorForTake(data.order.id, toolsData.tools);
+            } else {
+                displayResult(data);
+            }
+        } else {
+            // Refresh order status
+            refreshOrderStatus();
+        }
+    } catch (error) {
+        showLoading(false);
+        showToast('❌ Ошибка сети: ' + error.message, 'error');
+    }
+}
+
+// ======================== TOOL SELECTOR FOR TAKE ========================
+
+function showToolSelectorForTake(orderId, tools) {
+    selectedTakeTools = [];
+
+    const overlay = document.getElementById('dialog-overlay');
+    const content = document.getElementById('dialog-content');
+
+    content.innerHTML = `
+        <h3>Выберите инструменты</h3>
+        <p style="color: #666; margin-bottom: 16px;">Возьмите инструменты для работы:</p>
+
+        <div id="take-tools-list">
+            ${tools.map(tool => `
+                <div class="dialog-tool" data-item-id="${tool.item_id}">
+                    <div style="flex: 1;">
+                        <div style="font-weight: 500;">${tool.item_name}</div>
+                        <div style="font-size: 12px; color: #666;">
+                           Доступно: ${tool.available} |
+                            ${tool.source === 'workshop' ? '📍' : tool.source === 'main' ? '🏢' : '👤'}
+                            ${tool.source_name}
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox"
+                               class="tool-checkbox"
+                               data-item-id="${tool.item_id}"
+                               data-item-name="${tool.item_name}"
+                               data-available="${tool.available}"
+                               data-source="${tool.source}"
+                               data-source-name="${tool.source_name}"
+                               data-equipment-id="${tool.equipment_id || ''}"
+                               onchange="updateTakeSelectedTools()">
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+
+        <button class="btn-primary" style="margin-top: 16px;" onclick="submitTakeTools(${orderId})">
+            Подтвердить
+        </button>
+        <button class="btn-close" onclick="closeDialog()">Отмена</button>
+    `;
+
+    overlay.style.display = 'flex';
+}
+
+let selectedTakeTools = [];
+
+function updateTakeSelectedTools() {
+    selectedTakeTools = [];
+    document.querySelectorAll('#take-tools-list .tool-checkbox:checked').forEach(cb => {
+        selectedTakeTools.push({
+            item_id: cb.dataset.itemId,
+            item_name: cb.dataset.itemName,
+            available: parseInt(cb.dataset.available),
+            source: cb.dataset.source,
+            source_name: cb.dataset.sourceName,
+            equipment_id: cb.dataset.equipmentId || null
+        });
+    });
+}
+
+async function submitTakeTools(orderId) {
+    try {
+        const formData = new FormData();
+        formData.append('order_id', orderId);
+        formData.append('tools_json', JSON.stringify(selectedTakeTools));
+
+        const response = await fetch('/mobile/api/order/take-with-tools', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showMessage('✅ Инструменты взяты', 'success');
+            closeDialog();
+            selectedTakeTools = [];
+            refreshOrderStatus();
+        } else {
+            showMessage(data.message || 'Ошибка', 'error');
+        }
+    } catch (error) {
+        console.error('Take tools error:', error);
+        showMessage('Ошибка сети', 'error');
+    }
+}
+
+// ============================================================
+// Complete Order
+// ============================================================
+
+async function completeOrder() {
+    if (!currentOrderData) return;
+
+    if (!confirm('Завершить заказ #' + currentOrderData.id + '?')) {
+        return;
+    }
+
+    showLoading(true);
+
+    try {
+        const formData = new FormData();
+        formData.append('order_id', currentOrderData.id);
+        if (currentRouteData && currentRouteData.id) {
+            formData.append('route_id', currentRouteData.id);
+        }
+
+        const response = await fetch('/mobile/api/qr/complete-order', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const data = await response.json();
+        showLoading(false);
+
+        if (!data.success) {
+            showToast('❌ ' + (data.error || 'Ошибка'), 'error');
+            return;
+        }
+
+        showToast('✅ ' + data.message, 'success');
+
+        // Показать диалог выбора инструментов для завершения
+        const toolsResponse = await fetch('/mobile/api/user/available-tools');
+        const toolsData = await toolsResponse.json();
+
+        if (toolsData.success && toolsData.tools && toolsData.tools.length > 0) {
+            // Фильтруем инструменты которые были взяты для этого заказа
+            const takenTools = toolsData.tools.filter(t => t.equipment_id);
+            if (takenTools.length > 0) {
+                showCompleteToolsDialog(data.order?.id || currentOrderData.id, takenTools);
+            }
+        }
+
+        // Show statistics if available
+        if (data.avg_time_per_unit_minutes) {
+            setTimeout(() => {
+                showToast('⏱ Среднее время на единицу: ' + formatTime(data.avg_time_per_unit_minutes * 60), 'success');
+            }, 1500);
+        }
+
+        // Update UI
+        if (data.order) {
+            displayResult(data);
+        } else {
+            // Refresh order status
+            refreshOrderStatus();
+        }
+    } catch (error) {
+        showLoading(false);
+        showToast('❌ Ошибка сети: ' + error.message, 'error');
+    }
+}
+
+// ============================================================
+// Refresh Order Status
+// ============================================================
+
+async function refreshOrderStatus() {
+    if (!currentOrderData) return;
+
+    try {
+        const response = await fetch(`/mobile/api/qr/order-status/${currentOrderData.id}`);
+        const data = await response.json();
+
+        if (data.success) {
+            // Update statistics
+            if (document.getElementById('stats-card').style.display !== 'none') {
+                document.getElementById('stat-progress').textContent = data.progress_percent + '%';
+                document.getElementById('stat-operations').textContent =
+                    `${data.completed_operations}/${data.total_operations}`;
+
+                const avgTime = data.avg_time_per_unit_minutes;
+                document.getElementById('stat-avg-time').textContent =
+                    avgTime ? formatTime(avgTime * 60) : '—';
+
+                const progressBar = document.getElementById('progress-bar');
+                progressBar.style.width = data.progress_percent + '%';
+            }
+
+            // Update action buttons
+            currentOrderData.in_progress = data.in_progress;
+            currentOrderData.status = data.status;
+            currentOrderData.status_display = data.status_display;
+            updateActionButtons(currentOrderData);
+        }
+    } catch (error) {
+        console.error('Refresh status error:', error);
+    }
+}
+
+// ============================================================
+// Reset Scanner
+// ============================================================
+
+function resetScanner() {
+    isScanning = true;
+    currentOrderData = null;
+    currentRouteData = null;
+
+    document.getElementById('scanner-section').style.display = 'block';
+    document.getElementById('result-section').style.display = 'none';
+    document.getElementById('error-message').style.display = 'none';
+
+    hideError();
+    showLoading(false);
+
+    // Reinitialize scanner
+    setTimeout(() => {
+        initQRScanner();
+    }, 300);
+}
+
+// ============================================================
+// UI Helpers
+// ============================================================
+
+function showLoading(show) {
+    document.getElementById('loading').style.display = show ? 'block' : 'none';
+}
+
+function showError(message) {
+    const errorEl = document.getElementById('error-message');
+    errorEl.textContent = '❌ ' + message;
+    errorEl.style.display = 'block';
+}
+
+function hideError() {
+    document.getElementById('error-message').style.display = 'none';
+}
+
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = 'toast toast-' + type + ' show';
+
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
+function formatTime(seconds) {
+    if (!seconds || seconds <= 0) return '—';
+
+    seconds = Math.abs(seconds);
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+
+    if (hours > 0) {
+        return `${hours}ч ${minutes}м`;
+    } else if (minutes > 0) {
+        return `${minutes}м ${secs}с`;
+    } else {
+        return `${secs}с`;
+    }
+}
+</script>
+{% endblock %}

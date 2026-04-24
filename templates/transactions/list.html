@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}История операций | Склад{% endblock %}
+
+{% block content %}
+<div class="bg-white border-b border-gray-200 px-6 py-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">
+                <i class="fas fa-exchange-alt mr-2 text-green-600"></i>История операций
+            </h1>
+            <p class="text-gray-600 mt-1">Всего: {{ total_transactions }} операций</p>
+        </div>
+    </div>
+</div>
+
+<div class="p-4 sm:p-6">
+    <!-- Export Section -->
+    <div class="bg-white rounded-lg shadow p-4 mb-6">
+        <h3 class="font-bold text-gray-900 mb-3">
+            <i class="fas fa-file-export mr-2 text-green-600"></i>Экспорт операций
+        </h3>
+        <div class="flex flex-wrap gap-3">
+            <a href="/transactions/export?export_type=all"
+               class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
+                <i class="fas fa-download mr-2"></i>Все операции
+            </a>
+            <a href="/transactions/export?export_type=income"
+               class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                <i class="fas fa-arrow-down mr-2"></i>Приход
+            </a>
+            <a href="/transactions/export?export_type=expense"
+               class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                <i class="fas fa-arrow-up mr-2"></i>Расход
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white rounded-lg shadow p-4 mb-6">
+        <div class="flex space-x-4">
+            <a href="?filter_type=all"
+               class="px-4 py-2 rounded-lg {% if filter_type == 'all' %}bg-blue-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                Все
+            </a>
+            <a href="?filter_type=income"
+               class="px-4 py-2 rounded-lg {% if filter_type == 'income' %}bg-green-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                <i class="fas fa-arrow-down mr-1"></i>Приход
+            </a>
+            <a href="?filter_type=expense"
+               class="px-4 py-2 rounded-lg {% if filter_type == 'expense' %}bg-red-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                <i class="fas fa-arrow-up mr-1"></i>Расход
+            </a>
+        </div>
+    </div>
+    
+    <!-- Transactions Table -->
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Время</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Товар</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Тип</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Кол-во</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Пользователь</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Детали</th>
+                    {% if current_user.role == 'admin' %}
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Действия</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for txn in transactions %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {{ txn.timestamp.strftime('%Y-%m-%d %H:%M') if txn.timestamp else '-' }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {{ txn.item_name or txn.item_id or '-' }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if txn.operation_type == 'income' %}
+                        <span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
+                            <i class="fas fa-arrow-down mr-1"></i>Приход
+                        </span>
+                        {% elif txn.operation_type == 'expense' %}
+                        <span class="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs">
+                            <i class="fas fa-arrow-up mr-1"></i>Расход
+                        </span>
+                        {% else %}
+                        <span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">
+                            Корректировка
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-bold {% if txn.quantity > 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                        {{ '+' if txn.quantity > 0 else '' }}{{ txn.quantity }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {{ txn.user_name or '-' }}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600">
+                        {{ txn.detail or '-' }}
+                    </td>
+                    {% if current_user.role == 'admin' %}
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <button onclick="deleteTransaction({{ txn.id }})"
+                                class="text-red-600 hover:text-red-800 transition-colors"
+                                title="Удалить">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        {% if not transactions %}
+        <div class="text-center py-12">
+            <i class="fas fa-list-alt text-6xl text-gray-300 mb-4"></i>
+            <p class="text-gray-600">Операции не найдены</p>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="mt-6 flex justify-center">
+        <nav class="flex space-x-2">
+            {% for p in range(1, total_pages + 1) %}
+            <a href="?filter_type={{ filter_type }}&page={{ p }}"
+               class="px-4 py-2 rounded {% if p == page %}bg-blue-600 text-white{% else %}bg-white text-gray-700 hover:bg-blue-50 border border-gray-300{% endif %}">
+                {{ p }}
+            </a>
+            {% endfor %}
+        </nav>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+async function deleteTransaction(id) {
+    if (!confirm('Вы уверены, что хотите удалить эту операцию?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/transactions/api/transactions/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            location.reload();
+        } else {
+            alert(data.error || 'Ошибка удаления');
+        }
+    } catch (error) {
+        console.error('Delete error:', error);
+        alert('Ошибка при удалении');
+    }
+}
+</script>
+{% endblock %}

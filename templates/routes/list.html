@@ -1,0 +1,417 @@
+{% extends "base.html" %}
+
+{% block title %}Маршруты обработки{% endblock %}
+
+{% block content %}
+<div x-data="routesApp({{ highlight_detail_id|tojson }}, {{ can_approve|tojson }}, {{ is_admin|tojson }})" x-init="init()" class="h-full flex flex-col">
+
+    <!-- Header -->
+    <div class="bg-white border-b border-gray-200 px-4 sm:px-6 py-4">
+        <h1 class="text-xl sm:text-2xl font-bold text-gray-900">
+            <i class="fas fa-route mr-2 text-green-600"></i>Маршруты обработки
+        </h1>
+    </div>
+
+    <!-- Filters & Search -->
+    <div class="bg-white border-b border-gray-200 px-4 sm:px-6 py-3">
+        <form hx-get="/routes" hx-target="body" hx-swap="innerHTML" class="flex flex-col sm:flex-row gap-3">
+            <!-- Search -->
+            <div class="flex-1 relative">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                <input type="text" name="search" value="{{ search or '' }}"
+                       placeholder="Поиск по наименованию, обозначению, версии..."
+                       class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-gray-900">
+            </div>
+            <!-- Filter checkbox -->
+            <label class="flex items-center gap-2 text-sm text-gray-700 whitespace-nowrap cursor-pointer">
+                <input type="checkbox" name="approved_only" value="1"
+                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                       {% if show_all_routes %}checked{% endif %}>
+                <span>Показать все</span>
+            </label>
+            <!-- Sort -->
+            <select name="sort_by"
+                    class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900">
+                <option value="date_desc" {% if sort_by == 'date_desc' %}selected{% endif %}>Новые сначала</option>
+                <option value="date_asc" {% if sort_by == 'date_asc' %}selected{% endif %}>Старые сначала</option>
+                <option value="name_asc" {% if sort_by == 'name_asc' %}selected{% endif %}>По имени А-Я</option>
+            </select>
+            <!-- Submit -->
+            <button type="submit" class="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium shadow-sm transition-colors">
+                <i class="fas fa-filter mr-1"></i>Применить
+            </button>
+        </form>
+    </div>
+
+    <!-- Routes List -->
+    <div class="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div class="space-y-3 w-full">
+            {% for route in routes %}
+            {% set approved = route.get('approved', False) %}
+            {% set detail_name = route.get('detail_name', '') or 'Без названия' %}
+            {% set designation = route.get('designation', '') or '' %}
+            {% set version = route.get('version', '') or '' %}
+            {% set created_by = route.get('created_by', '\u2014') %}
+            {% set mark_name = route.get('mark_name', '') or '' %}
+            {% set sortament_name = route.get('sortament_name', '') or '' %}
+            {% set route_quantity = route.get('quantity', 1) or 1 %}
+            {% set route_length = route.get('length') %}
+            {% set route_width = route.get('dimension2') %}
+
+            {# Label #}
+            {% if designation and version %}
+                {% set label = designation ~ ' - ' ~ detail_name ~ ' - ' ~ version %}
+            {% elif designation %}
+                {% set label = designation ~ ' - ' ~ detail_name %}
+            {% else %}
+                {% set label = detail_name %}
+            {% endif %}
+
+            {# Border color #}
+            {% if approved %}
+                {% set border_class = 'border-green-400' %}
+                {% set status_badge = '<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs font-medium">\u2705 Утвержд\u0451н</span>' %}
+            {% else %}
+                {% set border_class = 'border-orange-400' %}
+                {% set status_badge = '<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded-full text-xs font-medium">\u23f3 Не утвержд\u0451н</span>' %}
+            {% endif %}
+
+            {# Highlight #}
+            {% set highlight_class = '' %}
+            {% if highlight_detail_id %}
+                {% if route.id|string == highlight_detail_id|string or route.designation == highlight_detail_id %}
+                    {% set highlight_class = 'bg-yellow-50 ring-2 ring-yellow-400' %}
+                {% endif %}
+            {% endif %}
+
+            <!-- Route Card -->
+            <div class="bg-white rounded-lg shadow-sm border-2 {{ border_class }} {{ highlight_class }} transition-all duration-200"
+                 :class="{ 'ring-2 ring-yellow-400 bg-yellow-50': highlightId === '{{ route.id }}' || highlightId === '{{ route.designation }}' }"
+                 id="route-{{ route.id }}"
+                 x-data="{ expanded: false, autoExpand: {{ 'true' if highlight_detail_id and (route.id|string == highlight_detail_id|string or route.designation == highlight_detail_id) else 'false' }} }"
+                 x-init="if (autoExpand) { $nextTick(() => { expanded = true; setTimeout(() => scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); }); }">
+
+                <!-- Card Header (always visible) -->
+                <div class="px-4 py-3 flex items-center gap-3 cursor-pointer"
+                     @click="expanded = !expanded">
+                    <!-- Expand Arrow -->
+                    <button type="button" class="flex-shrink-0 text-gray-500 hover:text-gray-700 transition-colors"
+                            @click.stop="expanded = !expanded">
+                        <i class="fas text-sm transition-transform duration-200"
+                           :class="expanded ? 'fa-chevron-up rotate-180' : 'fa-chevron-down'"></i>
+                    </button>
+
+                    <!-- Title -->
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm sm:text-base font-medium text-gray-900 truncate">{{ label }}</p>
+                    </div>
+
+                    <!-- Status Badge (mobile hidden) -->
+                    <div class="hidden sm:block flex-shrink-0">
+                        {{ status_badge | safe }}
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex items-center gap-1 flex-shrink-0" @click.stop>
+                        <!-- Toggle Approve -->
+                        {% if can_approve %}
+                        <form method="post" action="/routes/{{ route.id }}/toggle-approve" class="inline">
+                            <button type="submit"
+                                    class="p-1.5 rounded hover:bg-gray-100 transition-colors"
+                                    title="{{ 'Отозвать' if approved else 'Утвердить' }}">
+                                <i class="fas {{ 'fa-times text-red-500' if approved else 'fa-check text-green-600' }} text-sm"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+
+                        <!-- Create Order -->
+                        {% if can_create_order %}
+                        <button type="button"
+                                @click="showOrderModal({{ route.id }}, '{{ label | e }}', {{ route_quantity }})"
+                                class="p-1.5 rounded hover:bg-gray-100 transition-colors"
+                                title="Создать заказ">
+                            <i class="fas fa-plus-circle text-blue-600 text-sm"></i>
+                        </button>
+                        {% endif %}
+
+                        <!-- Edit Route -->
+                        <a href="/routes/{{ route.id }}"
+                           class="p-1.5 rounded hover:bg-gray-100 transition-colors inline-block"
+                           title="Редактировать маршрут">
+                            <i class="fas fa-edit text-green-600 text-sm"></i>
+                        </a>
+
+                        <!-- Copy Route -->
+                        <form method="post" action="/routes/{{ route.id }}/copy" class="inline">
+                            <button type="submit"
+                                    class="p-1.5 rounded hover:bg-gray-100 transition-colors"
+                                    title="Копировать маршрут">
+                                <i class="fas fa-copy text-gray-600 text-sm"></i>
+                            </button>
+                        </form>
+
+                        <!-- Delete (admin only) -->
+                        {% if is_admin %}
+                        <button type="button"
+                                @click="confirmDelete({{ route.id }}, '{{ label | e }}')"
+                                class="p-1.5 rounded hover:bg-gray-100 transition-colors"
+                                title="Удалить">
+                            <i class="fas fa-trash text-red-500 text-sm"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Expanded Content -->
+                <div x-show="expanded"
+                     x-transition:enter="transition ease-out duration-200"
+                     x-transition:enter-start="opacity-0 -translate-y-2"
+                     x-transition:enter-end="opacity-100 translate-y-0"
+                     x-transition:leave="transition ease-in duration-150"
+                     x-transition:leave-start="opacity-100 translate-y-0"
+                     x-transition:leave-end="opacity-0 -translate-y-2"
+                     style="display: none;">
+                    <div class="px-4 pb-4 pt-0">
+                        <div class="bg-gray-50 rounded-lg p-4 space-y-3 text-sm">
+                            <!-- Meta info -->
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-gray-600">
+                                <div><span class="font-medium text-gray-700">Создал:</span> {{ created_by }}</div>
+                                <div><span class="font-medium text-gray-700">Дата:</span> {% if route.get('created_at') %}{{ route.get('created_at').strftime('%d.%m.%Y %H:%M') }}{% else %}—{% endif %}</div>
+                                <div><span class="font-medium text-gray-700">Статус:</span> {{ status_badge | safe }}</div>
+                                {% if version %}
+                                <div><span class="font-medium text-gray-700">Версия:</span> <span class="text-purple-700">{{ version }}</span></div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Material -->
+                            {% if mark_name %}
+                            <div class="text-blue-800">
+                                <span class="font-medium text-gray-700">Материал:</span>
+                                {{ mark_name }} {{ sortament_name }}
+                            </div>
+                            {% endif %}
+
+                            <!-- Blank params -->
+                            {% if route_length or route_width or route_quantity %}
+                            <div class="text-orange-700">
+                                <span class="font-medium text-gray-700">📐</span>
+                                {% if route_length %}
+                                <span>L={{ route_length | int }} мм</span>
+                                {% endif %}
+                                {% if route_width %}
+                                <span> × W={{ route_width | int }} мм</span>
+                                {% endif %}
+                                {% if route_quantity %}
+                                <span> | ×{{ route_quantity }} шт</span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+
+                            <!-- Operations (loaded via Alpine) -->
+                            <div x-data="{ ops: [], loaded: false }"
+                                 x-init="
+                                     fetch('/routes/{{ route.id }}/operations')
+                                         .then(r => r.json())
+                                         .then(data => { ops = data.operations || []; loaded = true; })
+                                         .catch(() => { loaded = true; });
+                                 ">
+                                <template x-if="loaded && ops.length > 0">
+                                    <div class="text-gray-600">
+                                        <p class="font-medium text-gray-700 mb-1">📋 Операции:</p>
+                                        <ul class="space-y-1">
+                                            <template x-for="op in ops" :key="op.id">
+                                                <li class="text-xs pl-2 border-l-2 border-gray-200">
+                                                    <span x-text="op.sequence_number + '. ' + (op.operation_name || '')"></span>
+                                                    <template x-if="op.equipment_name">
+                                                        <span class="text-gray-500" x-text="' \u2192 ' + op.equipment_name"></span>
+                                                    </template>
+                                                    <template x-if="op.duration_minutes">
+                                                        <span class="text-gray-500" x-text="' (' + op.duration_minutes + ' \u043c\u0438\u043d)'"></span>
+                                                    </template>
+                                                </li>
+                                            </template>
+                                        </ul>
+                                    </div>
+                                </template>
+                                <template x-if="loaded && ops.length === 0">
+                                    <p class="text-xs text-gray-400">\u041e\u043f\u0435\u0440\u0430\u0446\u0438\u0438 \u043e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u044e\u0442</p>
+                                </template>
+                                <template x-if="!loaded">
+                                    <p class="text-xs text-gray-400">\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u0439...</p>
+                                </template>
+                            </div>
+
+                            <!-- Предварительная обработка -->
+                            {% set pre_raw = route.get('preprocessing_data') %}
+                            {% if pre_raw %}
+                            {% set pre_data = pre_raw | from_json %}
+                            {% if pre_data and pre_data.get('preprocessing') %}
+                            <div x-show="isOpen" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 transform -translate-y-2" x-transition:enter-end="opacity-100 transform translate-y-0" class="text-gray-600 pt-2 border-t border-gray-200 mt-2">
+                                <p class="font-medium text-gray-700 mb-1">⚙️ Предварительная обработка:</p>
+                                <div class="text-xs space-y-1">
+                                        {% if pre_data.get('form_type') %}
+                                        <span class="inline-block bg-gray-100 px-2 py-1 rounded mr-1">{{ pre_data.get('form_type') }}</span>
+                                        {% endif %}
+                                        {% if pre_data.get('param_l') %}
+                                        <span class="inline-block bg-gray-100 px-2 py-1 rounded mr-1">L={{ pre_data.get('param_l') }} мм</span>
+                                        {% endif %}
+                                        {% if pre_data.get('param_w') %}
+                                        <span class="inline-block bg-gray-100 px-2 py-1 rounded mr-1">W={{ pre_data.get('param_w') }} мм</span>
+                                        {% endif %}
+                                        {% if pre_data.get('param_s') %}
+                                        <span class="inline-block bg-gray-100 px-2 py-1 rounded mr-1">S={{ pre_data.get('param_s') }} мм</span>
+                                        {% endif %}
+                                        {% if pre_data.get('param_d') %}
+                                        <span class="inline-block bg-gray-100 px-2 py-1 rounded mr-1">Ø={{ pre_data.get('param_d') }} мм</span>
+                                        {% endif %}
+                                        {% if pre_data.get('param_d1') %}
+                                        <span class="inline-block bg-gray-100 px-2 py-1 rounded mr-1">d1={{ pre_data.get('param_d1') }} мм</span>
+                                        {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div x-show="showDeleteModal"
+         x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+         x-transition.opacity>
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6"
+             @click.stop>
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">Подтверждение удаления</h3>
+            <p class="text-sm text-gray-600 mb-4">Вы уверены, что хотите удалить маршрут "<span x-text="deleteRouteName"></span>"? Это действие необратимо.</p>
+            <div class="flex gap-3 justify-end">
+                <button type="button"
+                        @click="showDeleteModal = false"
+                        class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 text-sm font-medium transition-colors">
+                    Отмена
+                </button>
+                <form :action="'/routes/' + deleteRouteId + '/delete'" method="post" class="inline">
+                    <button type="submit"
+                            class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium transition-colors">
+                        Удалить
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Order Modal -->
+    <div x-show="showOrderModalFlag"
+         x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+         x-transition.opacity>
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6"
+             @click.stop>
+            <h3 class="text-lg font-semibold text-gray-900 mb-1">Создать заказ</h3>
+            <p class="text-sm text-gray-500 mb-4" x-text="'Маршрут: ' + orderRouteName"></p>
+
+            <form :action="'/routes/' + orderRouteId + '/create-order'" method="post" class="space-y-4">
+                <!-- Auto Schedule (disabled by default) -->
+                <input type="hidden" name="auto_schedule" value="false">
+                
+                <!-- Production Type -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Тип производства</label>
+                    <select name="production_type" x-model="productionType"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-gray-900">
+                        <option value="piece">Штучное</option>
+                        <option value="batch">Партийное</option>
+                    </select>
+                </div>
+
+                <!-- Quantity -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Количество деталей</label>
+                    <input type="number" name="quantity" x-model.number="orderQuantity" @input="calcBlanks" min="1"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-gray-900"
+                           autofocus>
+                </div>
+
+                <!-- Info -->
+                <div class="bg-gray-50 rounded-lg p-3 space-y-2 text-sm">
+                    <div class="flex justify-between text-gray-600">
+                        <span>Деталей из заготовки:</span>
+                        <span class="font-medium" x-text="routeQty"></span>
+                    </div>
+                    <div class="flex justify-between text-blue-800 font-semibold">
+                        <span>Потребуется заготовок:</span>
+                        <span x-text="blanksNeeded"></span>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex gap-3 justify-end pt-2">
+                    <button type="button" @click="showOrderModalFlag = false"
+                            class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 text-sm font-medium transition-colors">
+                        Отмена
+                    </button>
+                    <button type="submit"
+                            class="px-4 py-2 bg-green-700 text-white rounded-lg hover:bg-green-800 text-sm font-medium transition-colors">
+                        Создать заказ
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function routesApp(highlightId, canApprove, isAdmin) {
+    return {
+        highlightId: highlightId,
+        showDeleteModal: false,
+        deleteRouteId: null,
+        deleteRouteName: '',
+        showOrderModalFlag: false,
+        orderRouteId: null,
+        orderRouteName: '',
+        routeQty: 1,
+        productionType: 'piece',
+        orderQuantity: '',
+        blanksNeeded: 0,
+
+        confirmDelete(routeId, name) {
+            this.deleteRouteId = routeId;
+            this.deleteRouteName = name;
+            this.showDeleteModal = true;
+        },
+
+        showOrderModal(routeId, name, qty) {
+            this.orderRouteId = routeId;
+            this.orderRouteName = name;
+            this.routeQty = qty;
+            this.productionType = 'piece';
+            this.orderQuantity = '';
+            this.blanksNeeded = 0;
+            this.showOrderModalFlag = true;
+        },
+
+        calcBlanks() {
+            const qty = parseInt(this.orderQuantity) || 0;
+            const perBlank = parseInt(this.routeQty) || 1;
+            if (qty > 0 && perBlank > 0) {
+                this.blanksNeeded = Math.ceil(qty / perBlank);
+            } else {
+                this.blanksNeeded = 0;
+            }
+        },
+
+        init() {
+            // Parent init - child cards handle their own auto-expand via x-init
+        }
+    };
+}
+</script>
+{% endblock %}

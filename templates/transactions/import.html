@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+
+{% block title %}Импорт операций{% endblock %}
+
+{% block content %}
+<div class="bg-blue-50 border-b border-blue-100 px-4 sm:px-6 py-4">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-blue-700">
+            <i class="fas fa-file-import mr-2"></i>Импорт операций из Excel
+        </h1>
+        <a href="/transactions" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+            <i class="fas fa-arrow-left mr-2"></i>Назад
+        </a>
+    </div>
+</div>
+
+<div class="p-4 sm:p-6 max-w-4xl mx-auto">
+    <!-- Operation Type Selection -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">
+            <i class="fas fa-exchange-alt mr-2 text-blue-600"></i>Выберите тип операции
+        </h2>
+        <div class="grid grid-cols-2 gap-4">
+            <button type="button" id="btn-income" onclick="selectType('income')"
+                    class="type-btn p-4 rounded-lg border-2 border-green-500 bg-green-50 text-green-700 font-bold hover:bg-green-100 transition-colors">
+                <i class="fas fa-plus-circle text-2xl mb-2"></i>
+                <div>Приход</div>
+                <div class="text-xs font-normal text-green-600">Поступление на склад</div>
+            </button>
+            <button type="button" id="btn-expense" onclick="selectType('expense')"
+                    class="type-btn p-4 rounded-lg border-2 border-gray-200 bg-white text-gray-700 font-bold hover:bg-red-50 hover:border-red-500 hover:text-red-700 transition-colors">
+                <i class="fas fa-minus-circle text-2xl mb-2"></i>
+                <div>Расход</div>
+                <div class="text-xs font-normal text-gray-500">Списание со склада</div>
+            </button>
+        </div>
+    </div>
+
+    <!-- File Upload -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">
+            <i class="fas fa-upload mr-2 text-blue-600"></i>Загрузите Excel файл
+        </h2>
+        
+        <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors" id="drop-zone">
+            <i class="fas fa-cloud-upload-alt text-5xl text-gray-400 mb-4"></i>
+            <p class="text-gray-600 mb-2">Перетащите файл сюда или нажмите для выбора</p>
+            <p class="text-sm text-gray-500 mb-4">Поддерживаются .xlsx и .xls (макс. 10MB)</p>
+            <input type="file" id="file-input" accept=".xlsx,.xls" class="hidden" onchange="handleFileSelect(event)">
+            <button type="button" onclick="document.getElementById('file-input').click()" 
+                    class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                <i class="fas fa-folder-open mr-2"></i>Выбрать файл
+            </button>
+        </div>
+
+        <div id="file-info" class="hidden mt-4 p-4 bg-blue-50 rounded-lg">
+            <div class="flex items-center justify-between">
+                <div>
+                    <i class="fas fa-file-excel text-green-600 mr-2"></i>
+                    <span id="file-name" class="font-medium"></span>
+                </div>
+                <button type="button" onclick="clearFile()" class="text-gray-400 hover:text-red-600">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Progress -->
+        <div id="upload-progress" class="hidden mt-4">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-sm text-gray-600">Загрузка...</span>
+                <span id="progress-text" class="text-sm text-gray-600">0%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2">
+                <div id="progress-bar" class="bg-blue-600 h-2 rounded-full transition-all" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preview -->
+    <div id="preview-section" class="hidden bg-white rounded-lg shadow p-6 mb-6">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">
+            <i class="fas fa-eye mr-2 text-blue-600"></i>Превью данных
+        </h2>
+        <div class="mb-4 text-sm text-gray-600">
+            Найдено строк: <span id="row-count" class="font-bold text-blue-700"></span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm" id="preview-table">
+                <thead class="bg-gray-50" id="preview-head"></thead>
+                <tbody class="bg-white divide-y divide-gray-100" id="preview-body"></tbody>
+            </table>
+        </div>
+        <div class="mt-4 flex justify-end">
+            <button type="button" onclick="executeImport()" id="btn-import"
+                    class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                <i class="fas fa-check mr-2"></i>Выполнить импорт
+            </button>
+        </div>
+    </div>
+
+    <!-- Result -->
+    <div id="result-section" class="hidden bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">
+            <i class="fas fa-check-circle mr-2 text-green-600"></i>Результат импорта
+        </h2>
+        <div class="grid grid-cols-3 gap-4 mb-6">
+            <div class="p-4 bg-green-50 rounded-lg text-center">
+                <div class="text-3xl font-bold text-green-700" id="success-count">0</div>
+                <div class="text-sm text-green-600">Успешно</div>
+            </div>
+            <div class="p-4 bg-red-50 rounded-lg text-center">
+                <div class="text-3xl font-bold text-red-700" id="error-count">0</div>
+                <div class="text-sm text-red-600">Ошибки</div>
+            </div>
+            <div class="p-4 bg-blue-50 rounded-lg text-center">
+                <div class="text-3xl font-bold text-blue-700" id="total-count">0</div>
+                <div class="text-sm text-blue-600">Всего</div>
+            </div>
+        </div>
+        <div class="flex justify-center">
+            <a href="/transactions" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                <i class="fas fa-list mr-2"></i>Перейти к операциям
+            </a>
+        </div>
+    </div>
+
+    <!-- Format Info -->
+    <div class="bg-blue-50 rounded-lg p-5 border border-blue-100 mt-6">
+        <h3 class="font-bold text-blue-900 mb-3">
+            <i class="fas fa-info-circle mr-2"></i>Формат Excel файла
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-blue-800">
+            <div>
+                <strong>Обязательные колонки:</strong>
+                <ul class="list-disc list-inside mt-2 space-y-1">
+                    <li><code>item_id</code> или <code>ID товара</code> — ID инструмента</li>
+                    <li><code>quantity</code> или <code>Количество</code> — количество</li>
+                </ul>
+            </div>
+            <div>
+                <strong>Необязательные колонки:</strong>
+                <ul class="list-disc list-inside mt-2 space-y-1">
+                    <li><code>detail</code> или <code>Примечание</code> — описание</li>
+                    <li><code>user</code> или <code>Пользователь</code> — имя пользователя</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentType = 'income';
+let currentFileId = null;
+
+function selectType(type) {
+    currentType = type;
+    document.querySelectorAll('.type-btn').forEach(btn => {
+        btn.classList.remove('border-green-500', 'bg-green-50', 'text-green-700', 'border-red-500', 'bg-red-50', 'text-red-700');
+        btn.classList.add('border-gray-200', 'bg-white', 'text-gray-700');
+    });
+    
+    const btn = document.getElementById(type === 'income' ? 'btn-income' : 'btn-expense');
+    const colorClass = type === 'income' ? 'green' : 'red';
+    btn.classList.remove('border-gray-200', 'bg-white', 'text-gray-700');
+    btn.classList.add(`border-${colorClass}-500`, `bg-${colorClass}-50`, `text-${colorClass}-700`);
+}
+
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    document.getElementById('file-name').textContent = file.name;
+    document.getElementById('file-info').classList.remove('hidden');
+    document.getElementById('upload-progress').classList.remove('hidden');
+    
+    uploadFile(file);
+}
+
+async function uploadFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('operation_type', currentType);
+
+    try {
+        const response = await fetch('/transactions/import/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            alert('Ошибка: ' + (result.error || 'Неизвестная ошибка'));
+            return;
+        }
+
+        currentFileId = result.file_id;
+        showPreview(result);
+    } catch (e) {
+        alert('Ошибка загрузки: ' + e.message);
+    }
+}
+
+function showPreview(data) {
+    document.getElementById('upload-progress').classList.add('hidden');
+    document.getElementById('preview-section').classList.remove('hidden');
+    document.getElementById('row-count').textContent = data.row_count;
+
+    // Headers
+    const head = document.getElementById('preview-head');
+    head.innerHTML = '<tr>' + data.headers.map(h => `<th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">${h || ''}</th>`).join('') + '</tr>';
+
+    // Body (first 10 rows)
+    const body = document.getElementById('preview-body');
+    body.innerHTML = '';
+    data.preview.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-gray-50';
+        tr.innerHTML = data.headers.map(h => `<td class="px-4 py-2">${row[h] || ''}</td>`).join('');
+        body.appendChild(tr);
+    });
+}
+
+function clearFile() {
+    document.getElementById('file-input').value = '';
+    document.getElementById('file-info').classList.add('hidden');
+    document.getElementById('preview-section').classList.add('hidden');
+    document.getElementById('result-section').classList.add('hidden');
+    currentFileId = null;
+}
+
+async function executeImport() {
+    if (!currentFileId) {
+        alert('Файл не загружен');
+        return;
+    }
+
+    const btn = document.getElementById('btn-import');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Импорт...';
+
+    try {
+        const formData = new FormData();
+        formData.append('file_id', currentFileId);
+
+        const response = await fetch('/transactions/import/execute', {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            alert('Ошибка импорта: ' + (result.error || 'Неизвестная ошибка'));
+            return;
+        }
+
+        // Show results
+        document.getElementById('preview-section').classList.add('hidden');
+        document.getElementById('result-section').classList.remove('hidden');
+        document.getElementById('success-count').textContent = result.success_count;
+        document.getElementById('error-count').textContent = result.error_count;
+        document.getElementById('total-count').textContent = result.success_count + result.error_count;
+
+    } catch (e) {
+        alert('Ошибка: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check mr-2"></i>Выполнить импорт';
+    }
+}
+
+// Drag & drop
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('border-blue-500');
+});
+dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('border-blue-500');
+});
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('border-blue-500');
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileSelect({target: {files: [file]}});
+});
+</script>
+{% endblock %}

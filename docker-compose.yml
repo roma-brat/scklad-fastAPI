@@ -1,0 +1,100 @@
+# ============================================
+# docker-compose.yml — Склад Инструментов
+# ============================================
+# Использование:
+#   docker-compose up -d        # запуск
+#   docker-compose logs -f      # логи
+#   docker-compose down          # остановка
+# ============================================
+
+version: '3.8'
+
+services:
+  # ==========================================
+  # База данных PostgreSQL
+  # ==========================================
+  db:
+    image: postgres:14-alpine
+    container_name: sklad_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-sklad_db}
+      POSTGRES_USER: ${DB_USER:-sklad_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change_me_strong_password}
+    volumes:
+      # Персистентное хранение данных
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    networks:
+      - sklad_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-sklad_user} -d ${DB_NAME:-sklad_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ==========================================
+  # Приложение FastAPI
+  # ==========================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sklad_app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8551}:8551"
+    environment:
+      # Подключение к БД через имя сервиса docker-compose
+      DATABASE_URL: postgresql://${DB_USER:-sklad_user}:${DB_PASSWORD:-change_me_strong_password}@db:5432/${DB_NAME:-sklad_db}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-sklad_db}
+      DB_USER: ${DB_USER:-sklad_user}
+      DB_PASSWORD: ${DB_PASSWORD:-change_me_strong_password}
+      # Приложение
+      APP_PORT: 8551
+      APP_ENV: production
+      TIMEZONE: ${TIMEZONE:-Europe/Moscow}
+      SECRET_KEY: ${SECRET_KEY:-change_this_to_secure_random_string_32_chars}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEBUG: "false"
+    volumes:
+      # Персистентное хранение файлов
+      - ./uploads:/app/uploads
+      - ./item_images:/app/item_images
+    networks:
+      - sklad_network
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8551/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+# ==========================================
+# Сети
+# ==========================================
+networks:
+  sklad_network:
+    driver: bridge
+
+# ==========================================
+# Персистентное хранение
+# ==========================================
+volumes:
+  postgres_data:
+    driver: local

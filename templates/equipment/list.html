@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Оборудование{% endblock %}
+
+{% block content %}
+<div class="bg-white border-b border-gray-200 px-6 py-4">
+    <h1 class="text-2xl font-bold text-gray-900">
+        <i class="fas fa-industry mr-2 text-orange-600"></i>Оборудование
+    </h1>
+</div>
+
+<div class="p-6 bg-white">
+    <!-- Search -->
+    <div class="bg-white rounded-lg shadow p-4 mb-6">
+        <form hx-get="/equipment" hx-target="body" hx-swap="innerHTML" class="flex gap-4">
+            <input type="text" name="search" value="{{ search or '' }}"
+                   placeholder="Поиск по названию..."
+                   class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+            <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700bg-blue-700 transition-colors">
+                <i class="fas fa-search mr-2"></i>Поиск
+            </button>
+        </form>
+    </div>
+
+    <!-- Equipment Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for eq in equipment %}
+        <div class="bg-white rounded-lg shadow hover:shadow-lg:-700 transition-shadow card-hover">
+            <div class="p-4">
+                <h3 class="font-semibold text-gray-900 mb-2">{{ eq.name }}</h3>
+                {% if eq.inventory_number %}
+                <p class="text-sm text-gray-600 mb-2">Инв. №: {{ eq.inventory_number }}</p>
+                {% endif %}
+                <div class="flex items-center justify-between">
+                    {% if eq.is_active %}
+                    <span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">Активен</span>
+                    {% else %}
+                    <span class="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs">Неактивен</span>
+                    {% endif %}
+                    {% if eq.is_universal %}
+                    <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">Универсальный</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

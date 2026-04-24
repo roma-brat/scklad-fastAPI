@@ -1,0 +1,649 @@
+{% extends "base.html" %}
+
+{% block title %}Инвентарь цеха{% endblock %}
+
+{% block content %}
+<div class="bg-white border-b border-gray-200 px-6 py-4">
+    <h1 class="text-2xl font-bold text-gray-900">
+        <i class="fas fa-tools mr-2 text-blue-600"></i>Инвентарь цеха
+    </h1>
+    <p class="text-sm text-gray-600 mt-1">Инструменты на станках и у пользователей</p>
+</div>
+
+<div class="p-6 space-y-6 bg-white">
+    <!-- Секция 1: Пользователи и их инструменты -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-bold text-gray-900">
+                <i class="fas fa-users mr-2"></i>Пользователи и инструменты
+            </h2>
+        </div>
+
+        <div id="users-section" class="p-6">
+            <div class="text-center py-8">
+                <i class="fas fa-spinner fa-spin fa-2x text-blue-600"></i>
+                <p class="mt-2 text-gray-600">Загрузка данных...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Секция 2: Инструменты на станках -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h2 class="text-lg font-bold text-gray-900">
+                <i class="fas fa-industry mr-2"></i>Инструменты на станках
+            </h2>
+            <div class="flex gap-2">
+                <input type="text" id="equipment-search" placeholder="Поиск станка..."
+                       class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <select id="sort-select" onchange="sortEquipment()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option value="name_asc">По имени (А-Я)</option>
+                    <option value="name_desc">По имени (Я-А)</option>
+                    <option value="quantity_desc">По количеству (убыв)</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="equipment-section" class="p-6">
+            <div class="text-center py-8">
+                <i class="fas fa-spinner fa-spin fa-2x text-blue-600"></i>
+                <p class="mt-2 text-gray-600">Загрузка данных...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Диалог: Добавить инструмент на станок -->
+<div id="add-item-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-bold text-gray-900">Добавить инструмент</h3>
+        </div>
+
+        <div class="p-6 space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Станок</label>
+                <input type="text" id="add-equipment-name" readonly
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
+                <input type="hidden" id="add-equipment-id">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                    Инструмент <span class="text-red-500">*</span>
+                </label>
+                <!-- Кастомный dropdown с поиском -->
+                <div class="relative">
+                    <input type="text" id="item-search-input" placeholder="Начните вводить название или кликните для выбора..."
+                           oninput="filterItemOptions()"
+                           onfocus="showItemDropdown()"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white">
+                    <!-- Выпадающий список -->
+                    <div id="item-dropdown" class="hidden absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        <!-- Опции будут добавлены JS -->
+                    </div>
+                </div>
+                <input type="hidden" id="add-item-select" value="">
+            </div>
+
+            <div id="item-info" class="hidden p-3 bg-blue-50 rounded-lg text-sm">
+                <p class="font-medium text-gray-900" id="item-info-name"></p>
+                <p class="text-gray-600">Остаток на складе: <span id="item-info-qty"></span></p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                    Количество <span class="text-red-500">*</span>
+                </label>
+                <input type="number" id="add-quantity" value="1" min="1"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+        </div>
+
+        <div class="px-6 py-4 border-t border-gray-200 flex gap-2 justify-end">
+            <button onclick="closeAddDialog()" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                Отмена
+            </button>
+            <button onclick="addItemToWorkshop()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                <i class="fas fa-plus mr-2"></i>Добавить
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Диалог: Инструменты пользователя -->
+<div id="user-items-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-bold text-gray-900" id="user-items-title"></h3>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-6">
+            <div id="user-items-list" class="space-y-2"></div>
+        </div>
+
+        <div class="px-6 py-4 border-t border-gray-200 flex justify-end">
+            <button onclick="closeUserItemsDialog()" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                Закрыть
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Данные
+let allEquipment = [];
+let inventoryByEq = {};
+let allItems = {{ all_items | tojson if all_items else '[]' }};
+let usersData = [];
+
+// Инициализация
+document.addEventListener('DOMContentLoaded', () => {
+    loadData();
+});
+
+async function loadData() {
+    console.log('🔄 Загрузка данных...');
+    try {
+        // Загружаем данные параллельно
+        const [eqResponse, usersResponse] = await Promise.all([
+            fetch('/equipment/api/workshop/inventory'),
+            fetch('/equipment/api/users-with-items')
+        ]);
+
+        console.log('📥 Ответы:', { eqStatus: eqResponse.status, usersStatus: usersResponse.status });
+
+        if (!eqResponse.ok || !usersResponse.ok) {
+            const eqText = await eqResponse.text().catch(() => '');
+            const usersText = await usersResponse.text().catch(() => '');
+            throw new Error(`API error: eq=${eqResponse.status} (${eqText.substring(0, 100)}), users=${usersResponse.status} (${usersText.substring(0, 100)})`);
+        }
+
+        const eqData = await eqResponse.json();
+        const usersData_response = await usersResponse.json();
+
+        console.log('📦 Данные:', {
+            eqKeys: Object.keys(eqData),
+            usersCount: usersData_response.users?.length || 0,
+            eqCount: eqData.equipment?.length || 0,
+            invKeys: Object.keys(eqData.inventory || {})
+        });
+
+        // API может вернуть {"error": ...} или {"inventory": ..., "equipment": ...}
+        if (eqData.error || usersData_response.error) {
+            throw new Error(eqData.error || usersData_response.error);
+        }
+
+        inventoryByEq = eqData.inventory || {};
+        allEquipment = eqData.equipment || [];
+        usersData = usersData_response.users || [];
+
+        console.log('✅ Данные загружены:', {
+            equipment: allEquipment.length,
+            inventory: Object.keys(inventoryByEq).length,
+            users: usersData.length,
+            items: allItems.length
+        });
+
+        renderUsers();
+        renderEquipment();
+        console.log('✅ Рендер завершён');
+    } catch (e) {
+        console.error('❌ Load error:', e);
+        const errMsg = 'Ошибка загрузки данных: ' + e.message;
+        document.getElementById('users-section').innerHTML = `<p class="text-red-600 text-center py-8">${errMsg}</p>`;
+        document.getElementById('equipment-section').innerHTML = `<p class="text-red-600 text-center py-8">${errMsg}</p>`;
+    }
+}
+
+// ========== Пользователи ==========
+
+function renderUsers() {
+    const container = document.getElementById('users-section');
+    
+    if (!usersData || usersData.length === 0) {
+        container.innerHTML = '<p class="text-center text-gray-500 py-8">Нет пользователей</p>';
+        return;
+    }
+    
+    // Сортируем: сначала с инструментами
+    const sorted = [...usersData].sort((a, b) => {
+        if (a.total_quantity > 0 && b.total_quantity === 0) return -1;
+        if (a.total_quantity === 0 && b.total_quantity > 0) return 1;
+        return a.username.localeCompare(b.username);
+    });
+    
+    container.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            ${sorted.map(user => `
+                <div onclick="showUserItems(${user.id}, ${JSON.stringify(user.username)})"
+                     class="p-4 border rounded-lg cursor-pointer hover:shadow-md transition-shadow
+                            ${user.total_quantity > 0 ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-white'}">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            <h3 class="font-bold text-gray-900">${user.username}</h3>
+                            <p class="text-sm text-gray-600 mt-1">
+                                <i class="fas fa-tools mr-1"></i>${user.workstation || 'Не назначен'}
+                            </p>
+                        </div>
+                        ${user.total_quantity > 0 ? `
+                            <div class="text-right">
+                                <div class="text-2xl font-bold text-blue-600">${user.total_quantity}</div>
+                                <div class="text-xs text-gray-600">${user.total_items} поз.</div>
+                            </div>
+                        ` : '<div class="text-2xl text-gray-300">0</div>'}
+                    </div>
+                    ${user.items && user.items.length > 0 ? `
+                        <div class="mt-3 pt-3 border-t border-gray-200">
+                            <p class="text-xs text-gray-600">
+                                ${user.items.slice(0, 3).map(i => `${i.item_name} (${i.quantity})`).join(', ')}
+                                ${user.items.length > 3 ? ` +${user.items.length - 3}` : ''}
+                            </p>
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function showUserItems(userId, username) {
+    const user = usersData.find(u => u.id === userId);
+    if (!user) return;
+    
+    document.getElementById('user-items-title').textContent = `Инструменты: ${username}`;
+    
+    const listDiv = document.getElementById('user-items-list');
+    if (!user.items || user.items.length === 0) {
+        listDiv.innerHTML = '<p class="text-center text-gray-500 py-8">Нет инструментов на руках</p>';
+    } else {
+        listDiv.innerHTML = `
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Код</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Название</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Кол-во</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Дата выдачи</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    ${user.items.map(item => `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-2 text-sm font-mono text-gray-900">${item.item_code || '-'}</td>
+                            <td class="px-4 py-2 text-sm text-gray-900">${item.item_name}</td>
+                            <td class="px-4 py-2 text-sm font-bold text-gray-900">${item.quantity}</td>
+                            <td class="px-4 py-2 text-sm text-gray-600">${item.taken_at ? window.formatDate(item.taken_at) : '-'}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+    
+    document.getElementById('user-items-dialog').classList.remove('hidden');
+}
+
+function closeUserItemsDialog() {
+    document.getElementById('user-items-dialog').classList.add('hidden');
+}
+
+// ========== Оборудование ==========
+
+function renderEquipment() {
+    const container = document.getElementById('equipment-section');
+    
+    if (!allEquipment || allEquipment.length === 0) {
+        container.innerHTML = '<p class="text-center text-gray-500 py-8">Нет станков с инвентарем</p>';
+        return;
+    }
+    
+    container.innerHTML = `
+        <div class="space-y-4" id="equipment-list">
+            ${allEquipment.map(eq => renderEquipmentItem(eq)).join('')}
+        </div>
+    `;
+}
+
+function renderEquipmentItem(eq) {
+    const eqId = eq.id;
+    const items = inventoryByEq[eqId] || [];
+    const totalQty = items.reduce((sum, i) => sum + (i.quantity || 0), 0);
+    const safeName = (eq.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+    return `
+        <div class="border border-gray-200 rounded-lg" data-equipment-id="${eqId}" data-name="${safeName}" data-quantity="${totalQty}">
+            <div class="px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-gray-50"
+                 onclick="toggleEquipment(${eqId})">
+                <div class="flex items-center gap-3 flex-1">
+                    <i class="fas fa-chevron-right transition-transform" id="chevron-${eqId}"></i>
+                    <div>
+                        <h3 class="font-bold text-gray-900">${eq.name}</h3>
+                        <p class="text-sm text-gray-600">${eq.inventory_number || ''}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-bold">
+                        ${totalQty} шт
+                    </span>
+                    <span class="text-sm text-gray-600">${items.length} поз.</span>
+                    <button type="button"
+                            onclick="event.stopPropagation(); handleAddClick(this)"
+                            data-eq-id="${eqId}"
+                            data-eq-name="${safeName}"
+                            class="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div id="items-${eqId}" class="hidden border-t border-gray-200">
+                ${items.length === 0 ? `
+                    <div class="px-4 py-8 text-center text-gray-500">
+                        <i class="fas fa-inbox fa-2x mb-2"></i>
+                        <p>Нет инструментов</p>
+                        <button type="button"
+                                onclick="handleAddClick(this)"
+                                data-eq-id="${eqId}"
+                                data-eq-name="${safeName}"
+                                class="mt-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                            <i class="fas fa-plus mr-2"></i>Добавить инструмент
+                        </button>
+                    </div>
+                ` : `
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Код</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Название</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Кол-во</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Обновлено</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            ${items.map(item => `
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-4 py-2 text-sm font-mono text-gray-900">${item.item_code || '-'}</td>
+                                    <td class="px-4 py-2 text-sm text-gray-900">${item.item_name}</td>
+                                    <td class="px-4 py-2 text-sm font-bold text-gray-900">${item.quantity}</td>
+                                    <td class="px-4 py-2 text-sm text-gray-600">${item.updated_at ? window.formatDate(item.updated_at) : '-'}</td>
+                                    <td class="px-4 py-2 text-sm">
+                                        <div class="flex gap-1">
+                                            <button onclick="removeItem(${item.id}, 1)"
+                                                    class="px-2 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors"
+                                                    title="Уменьшить на 1">
+                                                <i class="fas fa-minus"></i>
+                                            </button>
+                                            <button onclick="deleteItem(${item.id})"
+                                                    class="px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                                                    title="Удалить полностью">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `}
+            </div>
+        </div>
+    `;
+}
+
+function toggleEquipment(eqId) {
+    const itemsDiv = document.getElementById(`items-${eqId}`);
+    const chevron = document.getElementById(`chevron-${eqId}`);
+    
+    if (itemsDiv.classList.contains('hidden')) {
+        itemsDiv.classList.remove('hidden');
+        chevron.style.transform = 'rotate(90deg)';
+    } else {
+        itemsDiv.classList.add('hidden');
+        chevron.style.transform = 'rotate(0deg)';
+    }
+}
+
+function filterEquipment() {
+    const search = document.getElementById('equipment-search').value.toLowerCase();
+    const items = document.querySelectorAll('[data-equipment-id]');
+    
+    items.forEach(item => {
+        const name = item.dataset.name.toLowerCase();
+        item.style.display = name.includes(search) ? '' : 'none';
+    });
+}
+
+function sortEquipment() {
+    const sortBy = document.getElementById('sort-select').value;
+    const container = document.getElementById('equipment-list');
+    const items = Array.from(container.children);
+    
+    items.sort((a, b) => {
+        const nameA = a.dataset.name;
+        const nameB = b.dataset.name;
+        const qtyA = parseInt(a.dataset.quantity);
+        const qtyB = parseInt(b.dataset.quantity);
+        
+        switch (sortBy) {
+            case 'name_asc': return nameA.localeCompare(nameB);
+            case 'name_desc': return nameB.localeCompare(nameA);
+            case 'quantity_desc': return qtyB - qtyA;
+            default: return 0;
+        }
+    });
+    
+    items.forEach(item => container.appendChild(item));
+}
+
+// ========== Диалог добавления ==========
+
+function handleAddClick(btn) {
+    const eqId = parseInt(btn.dataset.eqId);
+    const eqName = btn.dataset.eqName;
+    console.log('🔧 handleAddClick:', { eqId, eqName });
+    openAddDialog(eqId, eqName);
+}
+
+function openAddDialog(eqId, eqName) {
+    console.log('🔧 openAddDialog вызван:', { eqId, eqName, allItemsCount: allItems ? allItems.length : 'undefined' });
+
+    try {
+        document.getElementById('add-equipment-id').value = eqId;
+        document.getElementById('add-equipment-name').value = eqName;
+
+        // Очищаем поиск и dropdown
+        const searchInput = document.getElementById('item-search-input');
+        searchInput.value = '';
+        document.getElementById('add-item-select').value = '';
+        document.getElementById('item-info').classList.add('hidden');
+        hideItemDropdown();
+
+        // Заполняем dropdown
+        populateItemDropdown();
+
+        console.log('✅ Dropdown заполнен', allItems ? allItems.length : 0, 'инструментов');
+
+        document.getElementById('add-quantity').value = 1;
+
+        const dialog = document.getElementById('add-item-dialog');
+        console.log('📦 Диалог найден:', !!dialog);
+        dialog.classList.remove('hidden');
+        console.log('✅ Диалог открыт');
+    } catch (e) {
+        console.error('❌ Ошибка в openAddDialog:', e);
+        alert('Ошибка открытия диалога: ' + e.message);
+    }
+}
+
+function filterItemOptions() {
+    const search = document.getElementById('item-search-input').value.toLowerCase();
+    const dropdown = document.getElementById('item-dropdown');
+    const options = dropdown.querySelectorAll('.dropdown-option');
+
+    options.forEach(opt => {
+        const text = opt.textContent.toLowerCase();
+        opt.style.display = text.includes(search) ? '' : 'none';
+    });
+}
+
+function showItemDropdown() {
+    const dropdown = document.getElementById('item-dropdown');
+    // Если dropdown пустой — заполняем
+    if (dropdown.children.length === 0) {
+        populateItemDropdown();
+    }
+    dropdown.classList.remove('hidden');
+}
+
+function hideItemDropdown() {
+    document.getElementById('item-dropdown').classList.add('hidden');
+}
+
+function selectItem(itemId, itemName, itemQty) {
+    // Устанавливаем значение
+    document.getElementById('add-item-select').value = itemId;
+    document.getElementById('item-search-input').value = `${itemId} - ${itemName} (ост: ${itemQty})`;
+
+    // Показываем инфо
+    document.getElementById('item-info-name').textContent = itemName;
+    document.getElementById('item-info-qty').textContent = itemQty;
+    document.getElementById('item-info').classList.remove('hidden');
+
+    hideItemDropdown();
+}
+
+function populateItemDropdown() {
+    const dropdown = document.getElementById('item-dropdown');
+    dropdown.innerHTML = '';
+
+    if (!allItems || allItems.length === 0) {
+        dropdown.innerHTML = '<div class="px-4 py-3 text-gray-500 text-sm text-center">Нет инструментов — добавьте их на странице Склад</div>';
+        return;
+    }
+
+    allItems.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'dropdown-option px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm';
+        div.textContent = `${item.item_id} - ${item.name} (ост: ${item.quantity})`;
+        div.onclick = () => selectItem(item.item_id, item.name, item.quantity);
+        dropdown.appendChild(div);
+    });
+}
+
+// Закрытие dropdown при клике вне
+document.addEventListener('click', function(e) {
+    const dropdown = document.getElementById('item-dropdown');
+    const searchInput = document.getElementById('item-search-input');
+    if (!dropdown.contains(e.target) && e.target !== searchInput) {
+        hideItemDropdown();
+    }
+});
+
+function closeAddDialog() {
+    document.getElementById('add-item-dialog').classList.add('hidden');
+}
+
+async function addItemToWorkshop() {
+    const eqId = document.getElementById('add-equipment-id').value;
+    const itemId = document.getElementById('add-item-select').value;
+    const qty = document.getElementById('add-quantity').value;
+    
+    if (!itemId) {
+        showToast('Выберите инструмент', 'error');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('equipment_id', eqId);
+    formData.append('item_id', itemId);
+    formData.append('quantity', qty);
+    
+    try {
+        const response = await fetch('/equipment/api/workshop/add', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showToast('Инструмент добавлен', 'success');
+            closeAddDialog();
+            loadData(); // Перезагружаем данные
+        } else {
+            showToast(result.error || 'Ошибка добавления', 'error');
+        }
+    } catch (e) {
+        showToast('Ошибка сети: ' + e.message, 'error');
+    }
+}
+
+async function removeItem(inventoryId, qty) {
+    if (!confirm(`Уменьшить количество на ${qty}?`)) return;
+    
+    const formData = new FormData();
+    formData.append('inventory_id', inventoryId);
+    formData.append('quantity', qty);
+    
+    try {
+        const response = await fetch('/equipment/api/workshop/remove', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showToast('Инструмент удален', 'success');
+            loadData();
+        } else {
+            showToast(result.error || 'Ошибка', 'error');
+        }
+    } catch (e) {
+        showToast('Ошибка сети: ' + e.message, 'error');
+    }
+}
+
+async function deleteItem(inventoryId) {
+    if (!confirm('Удалить эту запись полностью?')) return;
+    
+    try {
+        const response = await fetch(`/equipment/api/workshop/items/${inventoryId}`, {
+            method: 'DELETE'
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showToast('Запись удалена', 'success');
+            loadData();
+        } else {
+            showToast(result.error || 'Ошибка', 'error');
+        }
+    } catch (e) {
+        showToast('Ошибка сети: ' + e.message, 'error');
+    }
+}
+
+function showToast(message, type = 'info') {
+    const colors = {
+        success: 'bg-green-500',
+        error: 'bg-red-500',
+        warning: 'bg-yellow-500',
+        info: 'bg-blue-500'
+    };
+
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50`;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+</script>
+{% endblock %}

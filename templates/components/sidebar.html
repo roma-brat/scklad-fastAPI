@@ -1,0 +1,218 @@
+<nav class="win-sidebar flex flex-col h-full py-4">
+    <!-- Logo -->
+    <div class="px-2 mb-4">
+        <div class="text-center">
+            <i class="fas fa-warehouse text-2xl sidebar-icon"></i>
+            <div class="hidden md:block text-xs font-bold sidebar-text">СКЛАД</div>
+        </div>
+    </div>
+
+<!-- Menu Items -->
+    <div class="flex-1 space-y-1 overflow-y-auto">
+{% if current_user.role == 'otk' %}
+        <!-- Только для ОТК -->
+        <a href="/otk"
+           class="sidebar-link"
+           title="ОТК - Задачи">
+               <i class="fas fa-clipboard-check text-lg flex-shrink-0"></i>
+               <span class="hidden md:inline ml-3 text-sm">Задачи</span>
+        </a>
+        <a href="/otk/cards"
+           class="sidebar-link"
+           title="ОТК - ЭМК">
+               <i class="fas fa-clipboard-list text-lg flex-shrink-0"></i>
+               <span class="hidden md:inline ml-3 text-sm">ЭМК</span>
+        </a>
+        {% else %}
+        <!-- Для остальных ролей -->
+        {# Получаем список экранов из permissions #}
+        {% set user_screens = [] %}
+        {% if current_user.screen_permissions is not none and current_user.screen_permissions is mapping %}
+            {% set user_screens = current_user.screen_permissions.screens | default([]) %}
+        {% endif %}
+        
+        {# Admin имеет полный доступ если нет explicit permissions #}
+        {% set has_full_access = current_user.role == 'admin' and not user_screens %}
+
+        {# === ВСПОМОГАТЕЛЬНЫЕ ПРОВЕРКИ === #}
+        {% set can_inventory = has_full_access or 'inventory' in user_screens %}
+        {% set can_transactions = has_full_access or 'transactions' in user_screens %}
+        {% set can_details = has_full_access or 'details' in user_screens %}
+        {% set can_routes = has_full_access or 'routes' in user_screens %}
+        {% set can_materials = has_full_access or 'materials' in user_screens %}
+        {% set can_planning = has_full_access or 'planner' in user_screens or 'planning' in user_screens or 'plan' in user_screens %}
+        {% set can_calendar = has_full_access or 'planning_calendar' in user_screens or 'calendar' in user_screens %}
+        {% set can_gantt = has_full_access or 'gantt' in user_screens or 'planning_gantt' in user_screens %}
+        {% set can_settings = has_full_access or current_user.role == 'admin' or 'planning_settings' in user_screens %}
+        {% set can_reports = has_full_access or 'reports' in user_screens %}
+        {% set can_users = has_full_access or current_user.role == 'admin' %}
+        {% set can_import_export = has_full_access or 'import_export' in user_screens %}
+        {% set can_workshop = has_full_access or 'workshop_inventory' in user_screens %}
+        {% set can_equipment = has_full_access or 'equipment' in user_screens %}
+        {% set can_order_card = has_full_access or 'order_card' in user_screens %}
+        {% set can_my_page = has_full_access or 'my_page' in user_screens %}
+
+        <a href="/dashboard"
+           class="sidebar-link"
+           title="Главная">
+              <i class="fas fa-home text-lg flex-shrink-0"></i>
+              <span class="hidden md:inline ml-3 text-sm">Главная</span>
+        </a>
+
+        {# === СКЛАД === #}
+        {% if can_inventory %}
+        <a href="/items"
+           class="sidebar-link"
+           title="Склад инструментов">
+              <i class="fas fa-boxes text-lg flex-shrink-0"></i>
+              <span class="hidden md:inline ml-3 text-sm">Склад инструментов</span>
+        </a>
+        {% endif %}
+
+        {% if can_transactions %}
+        <a href="/transactions"
+           class="sidebar-link"
+           title="Операции">
+             <i class="fas fa-exchange-alt text-lg flex-shrink-0"></i>
+             <span class="hidden md:inline ml-3 text-sm">Операции</span>
+        </a>
+        {% endif %}
+
+        {# === ПРОИЗВОДСТВО === #}
+        {% if can_details %}
+        <a href="/details"
+           class="sidebar-link"
+           title="Детали">
+             <i class="fas fa-cogs text-lg flex-shrink-0"></i>
+             <span class="hidden md:inline ml-3 text-sm">Детали</span>
+        </a>
+        {% endif %}
+
+        {% if can_routes %}
+        <a href="/routes"
+           class="sidebar-link"
+           title="Маршруты">
+              <i class="fas fa-route text-lg flex-shrink-0"></i>
+              <span class="hidden md:inline ml-3 text-sm">Маршруты</span>
+        </a>
+        {% endif %}
+
+{% if can_materials %}
+        <a href="/materials"
+           class="sidebar-link"
+           title="Материалы">
+              <i class="fas fa-layer-group text-lg flex-shrink-0"></i>
+              <span class="hidden md:inline ml-3 text-sm">Материалы</span>
+        </a>
+        {% endif %}
+
+        {# === ПЛАНИРОВАНИЕ === #}
+        {% if can_planning %}
+        <a href="/planning/plan"
+           class="sidebar-link"
+           title="План">
+              <i class="fas fa-tasks text-lg flex-shrink-0"></i>
+              <span class="hidden md:inline ml-3 text-sm">План</span>
+        </a>
+        {% endif %}
+
+        {% if can_calendar %}
+        <a href="/planning/calendar"
+           class="sidebar-link"
+           title="Календарь">
+              <i class="fas fa-calendar text-lg flex-shrink-0"></i>
+              <span class="hidden md:inline ml-3 text-sm">Календарь</span>
+        </a>
+        {% endif %}
+
+        {% if can_gantt %}
+        <a href="/planning/gantt"
+           class="sidebar-link"
+           title="Ганта">
+              <i class="fas fa-chart-bar text-lg flex-shrink-0"></i>
+              <span class="hidden md:inline ml-3 text-sm">Ганта</span>
+        </a>
+        {% endif %}
+
+        {% if can_settings %}
+        <a href="/planning/settings"
+           class="sidebar-link"
+           title="Настройки">
+              <i class="fas fa-cogs text-lg flex-shrink-0"></i>
+              <span class="hidden md:inline ml-3 text-sm">Настройки</span>
+        </a>
+        {% endif %}
+
+        {# === ОБОРУДОВАНИЕ === #}
+        {% if can_workshop %}
+        <a href="/equipment/workshop"
+           class="sidebar-link"
+           title="Инвентарь цеха">
+             <i class="fas fa-tools text-lg flex-shrink-0"></i>
+             <span class="hidden md:inline ml-3 text-sm">Инвентарь цеха</span>
+        </a>
+        {% endif %}
+
+        {% if can_equipment %}
+        <a href="/equipment"
+           class="sidebar-link"
+           title="Оборудование">
+             <i class="fas fa-hammer text-lg flex-shrink-0"></i>
+             <span class="hidden md:inline ml-3 text-sm">Оборудование</span>
+        </a>
+        {% endif %}
+
+        {# === ОТЧЁТЫ === #}
+        {% if can_reports %}
+        <a href="/reports"
+           class="sidebar-link"
+           title="Отчёты">
+               <i class="fas fa-clipboard-list text-lg flex-shrink-0"></i>
+               <span class="hidden md:inline ml-3 text-sm">Отчёты</span>
+        </a>
+        {% endif %}
+
+        {# === АДМИНИСТРИРОВАНИЕ === #}
+        {% if can_users %}
+        <a href="/users"
+           class="sidebar-link"
+           title="Пользователи">
+                 <i class="fas fa-users text-lg flex-shrink-0"></i>
+                 <span class="hidden md:inline ml-3 text-sm">Пользователи</span>
+        </a>
+        {% endif %}
+
+        {% if can_import_export %}
+        <a href="/import-excel"
+           class="sidebar-link"
+           title="Импорт/Экспорт">
+               <i class="fas fa-file-import text-lg flex-shrink-0"></i>
+               <span class="hidden md:inline ml-3 text-sm">Импорт/Экспорт</span>
+        </a>
+        {% endif %}
+
+        {# === ЛИЧНОЕ === #}
+        {% if can_my_page %}
+        <a href="/my-page"
+           class="sidebar-link"
+           title="Моя страница">
+               <i class="fas fa-user text-lg flex-shrink-0"></i>
+               <span class="hidden md:inline ml-3 text-sm">Моя страница</span>
+        </a>
+        {% endif %}
+
+        {% endif %}
+    </div>
+
+    <!-- Logout -->
+    <div class="mt-auto px-1 pb-2" id="sidebar-footer">
+        <form method="POST" action="/logout" class="w-full">
+            <button type="submit"
+                    class="sidebar-logout"
+                    title="Выйти">
+                <i class="fas fa-sign-out-alt text-xl flex-shrink-0"></i>
+                <span class="hidden md:inline ml-3 text-sm font-medium">Выйти</span>
+            </button>
+        </form>
+    </div>
+</nav>

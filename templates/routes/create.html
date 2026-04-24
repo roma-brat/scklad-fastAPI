@@ -1,0 +1,460 @@
+{% extends "base.html" %}
+
+{% block title %}Создание маршрута{% endblock %}
+
+{% block content %}
+<style>
+[x-cloak] { display: none !important; }
+</style>
+
+<div x-data="routeForm()" x-init="initEditMode()" class="h-full flex flex-col bg-white">
+    <!-- Header -->
+    <div class="bg-green-50 border-b border-green-100 px-4 sm:px-6 py-4">
+        <div class="flex items-center justify-between">
+            <h1 class="text-2xl sm:text-3xl font-bold text-green-700">
+                <i class="fas fa-route mr-2"></i>{% if is_edit_mode %}Редактирование{% else %}Создание{% endif %} маршрута обработки
+            </h1>
+            <a href="/routes" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
+                <i class="fas fa-times mr-2"></i>Отмена
+            </a>
+        </div>
+    </div>
+
+    <!-- Form -->
+    <form action="/routes/create" method="POST" class="flex-1 overflow-y-auto p-4 sm:p-6" @submit="prepareSubmit">
+        <input type="hidden" name="operations" :value="operationsJson">
+
+        <!-- Секция 1: Данные о детали -->
+        <div class="bg-white rounded-lg shadow p-4 sm:p-6 mb-4">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <i class="fas fa-cog mr-2 text-blue-600"></i>Данные о детали
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Обозначение *</label>
+                    <input type="text" name="designation" x-model="form.designation" required
+                           list="details-list"
+                           placeholder="АБВ.123456.789"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white text-gray-900">
+                    <datalist id="details-list">
+                        {% for detail in details %}
+                        <option value="{{ detail.designation }}">{{ detail.name }}</option>
+                        {% endfor %}
+                    </datalist>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Наименование *</label>
+                    <input type="text" name="detail_name" x-model="form.detail_name" required
+                           placeholder="Крышка"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white text-gray-900">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Версия</label>
+                    <input type="text" name="version" value="1.0"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white text-gray-900">
+                </div>
+            </div>
+        </div>
+
+        <!-- Секция 2: Материал -->
+        <div class="bg-white rounded-lg shadow p-4 sm:p-6 mb-4">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <i class="fas fa-cube mr-2 text-purple-600"></i>Материал
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Сортамент</label>
+                    <select x-model="form.sortament" @change="onSortamentChange()"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white text-gray-900">
+                        <option value="">-- Выберите сортамент --</option>
+                        {% for s in sortaments %}
+                        <option value="{{ s }}">{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Марка</label>
+                    <select x-model="form.mark" @change="updateSizes()"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white text-gray-900">
+                        <option value="">-- Выберите марку --</option>
+                        <template x-for="m in availableMarks" :key="m">
+                            <option :value="m" x-text="m"></option>
+                        </template>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Размер</label>
+                    <select x-model="form.size" @change="onSizeChange()"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white text-gray-900">
+                        <option value="">-- Выберите размер --</option>
+                        <template x-for="s in availableSizes" :key="s">
+                            <option :value="s" x-text="s"></option>
+                        </template>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Секция 3: Параметры заготовки -->
+        <div class="bg-white rounded-lg shadow p-4 sm:p-6 mb-4">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <i class="fas fa-ruler mr-2 text-orange-600"></i>Параметры заготовки
+            </h2>
+            
+            <!-- Параметры заготовки -->
+            
+            <!-- Стандартные поля (прокат, труба и т.д.) -->
+            <template x-if="!isSheet">
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Длина, мм *</label>
+                        <input type="number" name="length" x-model.number="form.length" required min="1"
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white text-gray-900">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Кол-во заготовок *</label>
+                        <input type="number" name="quantity" x-model.number="form.quantity" required min="1"
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white text-gray-900">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Возвратные отходы, %</label>
+                        <input type="number" name="waste_percent" x-model.number="form.waste_percent" min="0" max="100" step="0.1"
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white text-gray-900">
+                    </div>
+                </div>
+            </template>
+
+            <!-- Поля для листа/плиты -->
+            <template x-if="isSheet">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Длина, мм *</label>
+                        <input type="number" name="length" x-model.number="form.length" required min="1"
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white text-gray-900">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Ширина, мм</label>
+                        <input type="number" name="width" x-model.number="form.width" min="0"
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white text-gray-900">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Кол-во заготовок *</label>
+                        <input type="number" name="quantity" x-model.number="form.quantity" required min="1"
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white text-gray-900">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Возвратные отходы, %</label>
+                        <input type="number" name="waste_percent" x-model.number="form.waste_percent" min="0" max="100" step="0.1"
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white text-gray-900">
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Секция 4: Операции -->
+        <div class="bg-white rounded-lg shadow p-4 sm:p-6 mb-4">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-gray-900 flex items-center">
+                    <i class="fas fa-tasks mr-2 text-indigo-600"></i>Технологические операции
+                </h2>
+                <button type="button" @click="addOperation"
+                        class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                    <i class="fas fa-plus mr-2"></i>Добавить операцию
+                </button>
+            </div>
+
+            <!-- Список операций -->
+            <div class="space-y-3">
+                <template x-for="(op, index) in operations" :key="index">
+                    <div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center space-x-2">
+                                <span class="font-medium text-gray-700">Операция #<span x-text="index + 1"></span></span>
+                                <div class="flex items-center space-x-1 ml-2">
+                                    <button type="button" @click="moveOperation(index, -1)" 
+                                            x-show="index > 0"
+                                            class="p-1 text-blue-600 hover:text-blue-800"
+                                            title="Переместить вверх">
+                                        <i class="fas fa-arrow-up"></i>
+                                    </button>
+                                    <button type="button" @click="moveOperation(index, 1)"
+                                            x-show="index < operations.length - 1"
+                                            class="p-1 text-blue-600 hover:text-blue-800"
+                                            title="Переместить вниз">
+                                        <i class="fas fa-arrow-down"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <button type="button" @click="removeOperation(index)" class="text-red-600 hover:text-red-800">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Цех</label>
+                                <select x-model="op.workshop_id"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-gray-900">
+                                    <option value="">-- Выберите цех --</option>
+                                    {% for ws in workshops %}
+                                    <option value="{{ ws.id }}">{{ ws.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Тип операции *</label>
+                                <select x-model="op.operation_type_id" required
+                                        class="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-gray-900">
+                                    <option value="">-- Выберите --</option>
+                                    {% for op_type in operation_types %}
+                                    <option value="{{ op_type.id }}">{{ op_type.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Оборудование</label>
+                                <select x-model="op.equipment_id"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-gray-900">
+                                    <option value="">-- Выберите --</option>
+                                    {% for eq in equipment_list %}
+                                    <option value="{{ eq.id }}">{{ eq.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Время (мин)</label>
+                                <input type="number" x-model.number="op.duration_minutes" min="1"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-gray-900">
+                            </div>
+                            <div class="lg:col-span-3">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Примечания</label>
+                                <input type="text" x-model="op.notes"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 text-sm bg-white text-gray-900">
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <div x-show="operations.length === 0" class="text-center py-8 text-gray-500">
+                    <i class="fas fa-tasks text-4xl mb-2 text-gray-300"></i>
+                    <p>Нет операций. Нажмите "Добавить операцию"</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Кнопки сохранения -->
+        <div class="bg-white rounded-lg shadow p-4 sm:p-6 sticky bottom-0">
+            <div class="flex flex-wrap gap-3 justify-end">
+                <a href="/routes" class="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+                    Отмена
+                </a>
+                <button type="button"
+                        @click="console.log('Form:', form); console.log('Ops:', operations); console.log('Valid:', isValid); alert('Проверьте консоль (F12)')"
+                        class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm">
+                    <i class="fas fa-bug mr-1"></i>Debug
+                </button>
+                <button type="submit"
+                        :disabled="!isValid"
+                        :class="isValid ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 cursor-not-allowed'"
+                        class="px-6 py-2 text-white rounded-lg transition-colors">
+                    <i class="fas fa-save mr-2"></i>Сохранить маршрут
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+// Переменные из Python
+const isEditMode = {{ 'true' if is_edit_mode else 'false' }};
+const existingRoute = {{ existing_route | tojson | default('null') }};
+const existingOps = {{ existing_operations | tojson | default('[]') }};
+
+function routeForm() {
+    return {
+        form: {
+            designation: '{{ detail_designation or "" }}',
+            detail_name: '',
+            length: null,
+            width: null,
+            quantity: 1,
+            waste_percent: 0,
+            sortament: '',
+            mark: '',
+            size: '',
+            material_instance_id: null,
+        },
+        operations: [],
+        isValid: false,
+        isSheet: false,
+        materialsData: {{ materials_data | default({}) | tojson }},
+        availableMarks: [],
+        availableSizes: [],
+
+        initEditMode() {
+            // Загружаем данные маршрута для редактирования
+            if (isEditMode && existingRoute && existingRoute.id) {
+                this.form.detail_name = existingRoute.detail_name || '';
+                this.form.length = existingRoute.length;
+                this.form.width = existingRoute.width;
+                this.form.quantity = existingRoute.quantity || 1;
+                this.form.waste_percent = existingRoute.waste_percent || 0;
+                this.form.sortament = existingRoute.sortament_name || '';
+                this.form.mark = existingRoute.mark_name || '';
+                this.form.material_instance_id = existingRoute.material_instance_id;
+                
+                // Загружаем операции
+                if (existingOps && existingOps.length > 0) {
+                    this.operations = existingOps.map(op => ({
+                        id: op.id,
+                        operation_type_id: op.operation_type_id,
+                        operation_name: op.operation_name,
+                        workshop_id: op.workshop_id,
+                        equipment_id: op.equipment_id,
+                        equipment_name: op.equipment_name,
+                        duration_minutes: op.duration_minutes,
+                        prep_time: op.prep_time,
+                        control_time: op.control_time,
+                        notes: op.notes || '',
+                    }));
+                }
+                
+                // Обновляем каскадные списки материалов
+                this.onSortamentChange();
+                
+                console.log('Edit mode initialized:', existingRoute);
+            }
+        },
+
+        onSortamentChange() {
+            const s = this.form.sortament;
+            const sLower = s.toLowerCase();
+            this.isSheet = sLower.includes('лист') || sLower.includes('плит');
+            
+            // Обновляем марки
+            if (s && this.materialsData[s]) {
+                this.availableMarks = Object.keys(this.materialsData[s]).sort();
+            } else {
+                this.availableMarks = [];
+            }
+            this.form.mark = '';
+            this.availableSizes = [];
+            this.form.size = '';
+            this.form.material_instance_id = null;
+        },
+
+        updateSizes() {
+            const s = this.form.sortament;
+            const m = this.form.mark;
+            
+            if (s && m && this.materialsData[s] && this.materialsData[s][m]) {
+                // Сортировка размеров от меньшего к большему
+                // Размеры имеют формат "100 х 200" или "100 х 200 х 50"
+                this.availableSizes = this.materialsData[s][m]
+                    .map(item => item.dimension_str)
+                    .sort((a, b) => {
+                        const dimsA = a.split('х').map(s => parseFloat(s.trim()) || 0);
+                        const dimsB = b.split('х').map(s => parseFloat(s.trim()) || 0);
+                        
+                        // Сравниваем по первому, потом по второму, потом по третьему измерению
+                        for (let i = 0; i < Math.max(dimsA.length, dimsB.length); i++) {
+                            const valA = dimsA[i] || 0;
+                            const valB = dimsB[i] || 0;
+                            if (valA !== valB) return valA - valB;
+                        }
+                        return 0;
+                    });
+            } else {
+                this.availableSizes = [];
+            }
+            this.form.size = '';
+            this.form.material_instance_id = null;
+        },
+
+        onSizeChange() {
+            const s = this.form.sortament;
+            const m = this.form.mark;
+            const sizeStr = this.form.size;
+            
+            if (s && m && sizeStr && this.materialsData[s] && this.materialsData[s][m]) {
+                const items = this.materialsData[s][m];
+                const found = items.find(item => item.dimension_str === sizeStr);
+                if (found) {
+                    this.form.material_instance_id = found.id;
+                }
+            }
+        },
+
+        addOperation() {
+            this.operations.push({
+                operation_type_id: '',
+                equipment_id: '',
+                workshop_id: '',
+                duration_minutes: null,
+                notes: '',
+            });
+            this.validate();
+        },
+
+        removeOperation(index) {
+            this.operations.splice(index, 1);
+            this.validate();
+        },
+
+        moveOperation(index, direction) {
+            const newIndex = index + direction;
+            if (newIndex < 0 || newIndex >= this.operations.length) return;
+
+            const temp = this.operations[index];
+            this.operations[index] = this.operations[newIndex];
+            this.operations[newIndex] = temp;
+
+            this.validate();
+        },
+
+        get operationsJson() {
+            return JSON.stringify(this.operations);
+        },
+
+        validate() {
+            const f = this.form;
+            // Проверяем, что length не null и больше 0
+            const hasLength = f.length !== null && f.length !== undefined && f.length > 0;
+            const hasQuantity = f.quantity > 0;
+            const hasOperations = this.operations.length > 0;
+            
+            this.isValid = f.designation && f.detail_name && hasLength && hasQuantity && hasOperations;
+        },
+
+        prepareSubmit(e) {
+            this.validate();
+            console.log('prepareSubmit called, isValid:', this.isValid);
+            console.log('Form data:', this.form);
+            console.log('Operations:', this.operations);
+            
+            if (!this.isValid) {
+                e.preventDefault();
+                let errorMsg = 'Заполните все обязательные поля:\n\n';
+                
+                if (!this.form.designation) {
+                    errorMsg += '❌ Обозначение\n';
+                }
+                if (!this.form.detail_name) {
+                    errorMsg += '❌ Наименование\n';
+                }
+                if (this.form.length === null || this.form.length === undefined || this.form.length <= 0) {
+                    errorMsg += '❌ Длина (> 0)\n';
+                }
+                if (!this.form.quantity || this.form.quantity <= 0) {
+                    errorMsg += '❌ Кол-во заготовок (> 0)\n';
+                }
+                if (this.operations.length === 0) {
+                    errorMsg += '❌ Добавьте хотя бы одну операцию\n';
+                }
+                
+                alert(errorMsg);
+            }
+        },
+    }
+}
+</script>
+{% endblock %}

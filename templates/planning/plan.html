@@ -1,0 +1,1150 @@
+{% extends "base.html" %}
+
+{% block title %}План заказов{% endblock %}
+
+{% block extra_css %}
+<style>
+.order-card {
+    transition: all 0.2s ease;
+}
+.order-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    transform: translateY(-2px);
+}
+.schedule-item {
+    border-left: 3px solid #3b82f6;
+    padding-left: 8px;
+    margin-bottom: 4px;
+}
+.schedule-item.completed {
+    border-left-color: #22c55e;
+    opacity: 0.7;
+}
+.schedule-item.in_progress {
+    border-left-color: #f59e0b;
+}
+.schedule-item.delayed {
+    border-left-color: #ef4444;
+}
+.urgent-badge {
+    animation: pulse 2s infinite;
+}
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+.schedule-item-draggable {
+    transition: all 0.2s ease;
+    border-radius: 4px;
+    padding: 2px 4px;
+}
+.schedule-item-draggable:hover {
+    background-color: rgba(59, 130, 246, 0.1);
+}
+.schedule-item-draggable.dragging {
+    opacity: 0.5;
+    background-color: rgba(59, 130, 246, 0.2);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="bg-white border-b border-gray-200 px-6 py-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">
+                <i class="fas fa-tasks mr-2 text-purple-600"></i>План заказов
+            </h1>
+            <p class="text-sm text-gray-500 mt-1">Управление производственными заказами и планирование</p>
+        </div>
+        <div class="flex space-x-2">
+            {% if current_user.role == 'admin' or current_user.screen_permissions is none or 'planning' in current_user.screen_permissions %}
+            <a href="/planning/plan" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700bg-purple-500 transition">
+                <i class="fas fa-tasks mr-2"></i>План
+            </a>
+            {% endif %}
+            {% if current_user.role == 'admin' or current_user.screen_permissions is none or 'planning_calendar' in current_user.screen_permissions %}
+            <a href="/planning/calendar" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700bg-blue-500 transition">
+                <i class="fas fa-calendar-alt mr-2"></i>Календарь
+            </a>
+            {% endif %}
+            {% if current_user.role == 'admin' or current_user.screen_permissions is none or 'planning_gantt' in current_user.screen_permissions %}
+            <a href="/planning/gantt" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700bg-green-500 transition">
+                <i class="fas fa-chart-bar mr-2"></i>Диаграмма Ганта
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="p-6 bg-white">
+    <!-- Action Bar -->
+    <div class="bg-white rounded-lg shadow p-4 mb-6 flex items-center justify-between">
+        <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-2">
+                <span class="text-sm text-gray-600">Фильтр:</span>
+                <select id="status-filter" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" onchange="filterOrders()">
+                    <option value="all">Все</option>
+                    <option value="planned">Запланированные</option>
+                    <option value="unplanned">Не запланированные</option>
+                </select>
+            </div>
+            <div class="flex items-center space-x-2">
+                <input type="text" id="search-orders" placeholder="Поиск..." class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-48" oninput="filterOrders()">
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">Всего заказов</p>
+                    <p class="text-2xl font-bold text-gray-900" id="stat-total">{{ orders|length }}</p>
+                </div>
+                <div class="text-3xl text-gray-400"><i class="fas fa-clipboard-list"></i></div>
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">Запланировано</p>
+                    <p class="text-2xl font-bold text-green-600" id="stat-planned">{{ orders|selectattr('is_planned')|list|length }}</p>
+                </div>
+                <div class="text-3xl text-green-400"><i class="fas fa-calendar-check"></i></div>
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">Не запланировано</p>
+                    <p class="text-2xl font-bold text-orange-600" id="stat-unplanned">{{ orders|rejectattr('is_planned')|list|length }}</p>
+                </div>
+                <div class="text-3xl text-orange-400"><i class="fas fa-clock"></i></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Orders List -->
+    <div id="orders-container" class="space-y-4">
+        {% for order in orders %}
+        <div class="order-card bg-white rounded-lg shadow p-4 {% if order.id == highlight_order %}ring-4 ring-yellow-400 bg-yellow-50{% elif order.is_planned %}border-l-4 border-l-green-500 bg-green-50{% else %}border-l-4 border-l-blue-300{% endif %}"
+             data-order-id="{{ order.id }}"
+             data-status="{{ 'planned' if order.is_planned else 'unplanned' }}"
+             data-detail-name="{{ order.detail_name|lower }}"
+             data-designation="{{ order.designation|lower }}"
+             id="order-{{ order.id }}">
+
+            <div class="flex items-start justify-between">
+                <div class="flex-1">
+                    <!-- Header -->
+                    <div class="flex items-center space-x-3 mb-2">
+                        {% if order.priority == 1 %}
+                        <span class="urgent-badge px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-bold">
+                            <i class="fas fa-bolt mr-1"></i>СРОЧНЫЙ
+                        </span>
+                        {% endif %}
+
+                        <!-- Номер заказа -->
+                        {% if order.production_type == 'batch' and order.batch_number %}
+                        <span class="px-2 py-1 bg-purple-600 text-white rounded-md text-sm font-bold">
+                            {{ order.batch_number }}
+                        </span>
+                        {% elif order.order_number %}
+                        <span class="px-2 py-1 bg-blue-600 text-white rounded-md text-sm font-bold">
+                            ШТ-{{ order.order_number }}
+                        </span>
+                        {% else %}
+                        <span class="px-2 py-1 bg-blue-600 text-white rounded-md text-sm font-bold">
+                            ШТ-{{ order.id }}
+                        </span>
+                        {% endif %}
+
+                        <h3 class="text-lg font-semibold text-gray-900">
+                            {% if order.designation %}{{ order.designation }} - {% endif %}{{ order.detail_name }}
+                        </h3>
+                        {% if order.production_type == 'batch' %}
+                        <span class="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs">
+                            <i class="fas fa-layer-group mr-1"></i>Партийное
+                        </span>
+                        {% else %}
+                        <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                            <i class="fas fa-cube mr-1"></i>Штучное
+                        </span>
+                        {% endif %}
+                        {% if order.route_version %}
+                        <span class="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs">
+                            <i class="fas fa-code-branch mr-1"></i>вер. {{ order.route_version }}
+                        </span>
+                        {% endif %}
+                        <div class="inline-flex items-center space-x-1 ml-2">
+                            {% if order.is_planned %}
+                            <a href="/orders/{{ order.id }}/card"
+                               class="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition"
+                               title="ЭМК">
+                                <i class="fas fa-clipboard-list"></i>
+                            </a>
+                            <a href="/planning/api/order/{{ order.id }}/pdf"
+                               target="_blank"
+                               class="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition"
+                               title="Скачать PDF">
+                                <i class="fas fa-file-pdf"></i>
+                            </a>
+                            {% endif %}
+                            {% if not order.is_planned %}
+                            <button type="button"
+                                    onclick="openScheduleDialogFromButton(this)"
+                                    data-order-id="{{ order.id }}"
+                                    data-detail-name="{{ order.detail_name | default('Деталь') }}"
+                                    data-production-type="{{ order.production_type | default('piece') }}"
+                                    class="btn-add-to-plan p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                    title="Добавить в план">
+                                <i class="fas fa-calendar-plus"></i>
+                            </button>
+                            {% endif %}
+                            {% if order.is_planned %}
+                            <button type="button"
+                                    class="btn-clear-schedule p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition"
+                                    data-order-id="{{ order.id }}"
+                                    title="Убрать из плана">
+                                <i class="fas fa-calendar-times"></i>
+                            </button>
+                            {% endif %}
+                            <button type="button"
+                                    class="btn-delete-order p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition"
+                                    data-order-id="{{ order.id }}"
+                                    title="Удалить заказ">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            {% if order.route_id %}
+                            <a href="/routes/{{ order.route_id }}"
+                               class="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition"
+                               title="Редактировать маршрут">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Details -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-3">
+                        <div>
+                            <span class="text-gray-500">Количество деталей:</span>
+                            <span class="font-semibold ml-1">{{ order.quantity or 1 }} шт.</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500">Заготовок:</span>
+                            <span class="font-semibold ml-1">{{ order.blanks_needed or order.quantity or 1 }} шт.</span>
+                        </div>
+                        {% if order.mark_name or order.sortament_name %}
+                        <div>
+                            <span class="text-gray-500">Материал:</span>
+                            <span class="font-semibold ml-1">{{ order.mark_name or '' }} {{ order.sortament_name or '' }}</span>
+                        </div>
+                        {% endif %}
+                        <div>
+                            <span class="text-gray-500">Добавлен:</span>
+                            <span class="font-semibold ml-1">{{ order.created_at.strftime('%d.%m.%Y') if order.created_at else '-' }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Schedule: станок : дата начала - дата окончания -->
+                    {% if order.schedule_items %}
+                    <div class="mt-1">
+                        {% for item in order.schedule_items %}
+                        <div class="flex items-center text-xs py-0.5 {% if item.is_cooperation %}bg-purple-50{% endif %}">
+                            <span class="font-medium text-gray-600 w-6">{{ item.sequence_number }}.</span>
+                            <span class="text-gray-800 font-medium mr-2">{{ item.operation_name or '—' }}</span>
+                            {% if item.is_cooperation %}
+                            <span class="text-purple-600 text-[10px] font-medium">({{ item.coop_company_name or 'Кооперация' }}: {{ item.coop_duration_days or 0 }} дн.)</span>
+                            {% else %}
+                            <span class="text-gray-500 text-[10px]">({{ item.all_equipment_names | join(', ') or item.equipment_name or '—' }})</span>
+                            {% endif %}
+                            <span class="text-gray-400 mx-1">:</span>
+                            <span class="ml-1">
+                                {# Дата начала #}
+                                {% if item.planned_date %}
+                                    {% if item.planned_date is string %}
+                                        <span class="text-gray-500">{{ item.planned_date[:10] }}</span>
+                                    {% else %}
+                                        <span class="text-gray-500">{{ item.planned_date.strftime('%d.%m.%Y') }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-gray-400">—</span>
+                                {% endif %}
+                            </span>
+                            <span class="text-gray-400 mx-1">→</span>
+                            <span>
+                                {# Дата окончания #}
+                                {% if item.end_date %}
+                                    {% if item.end_date is string %}
+                                        <span class="text-gray-500">{{ item.end_date[:10] }}</span>
+                                    {% else %}
+                                        <span class="text-gray-500">{{ item.end_date.strftime('%d.%m.%Y') }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-gray-400">—</span>
+                                {% endif %}
+                            </span>
+                            <span class="ml-2 px-1 rounded text-xs
+                                {% if item.status == 'completed' %}bg-green-100 text-green-700
+                                {% elif item.status == 'in_progress' %}bg-yellow-100 text-yellow-700
+                                {% elif item.status == 'delayed' %}bg-red-100 text-red-700
+                                {% elif item.status == 'not_planned' %}bg-orange-100 text-orange-700
+                                {% else %}bg-gray-100 text-gray-600{% endif %}">
+                                {{ {'planned': 'Заплан', 'in_progress': 'В работе', 'completed': 'Готово', 'delayed': 'Задерж', 'not_planned': 'Не заплан'}.get(item.status, item.status or 'Заплан') }}
+                            </span>
+                            {% if item.duration_minutes %}
+                            <span class="ml-1 text-gray-400 text-[10px]">({{ item.duration_minutes }}мин)</span>
+                            {% endif %}
+                            {% if item.quantity and item.quantity > 1 %}
+                            <span class="ml-1 text-purple-600 text-[10px] font-medium">{{ item.quantity }} шт.</span>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <!-- Status -->
+                    <div class="mt-2 text-sm">
+                        {% if order.is_planned %}
+                        <span class="text-green-600 font-semibold"><i class="fas fa-calendar-check mr-1"></i>Запланирован</span>
+                        {% else %}
+                        <span class="text-orange-600 font-semibold"><i class="fas fa-clock mr-1"></i>Не запланирован</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        {% if not orders %}
+        <div class="bg-white rounded-lg shadow p-12 text-center">
+            <i class="fas fa-clipboard-list text-6xl text-gray-300 mb-4"></i>
+            <p class="text-gray-600 text-lg">Заказов нет</p>
+            <p class="text-gray-500 text-sm mt-2">Добавьте маршруты со страницы 'Маршруты'</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Schedule Dialog (Добавить в план) -->
+
+<!-- Move Dialog -->
+<div id="move-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-80">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">
+            <i class="fas fa-calendar-alt mr-2 text-blue-600"></i>Переместить операцию
+        </h3>
+        <input type="hidden" id="move-schedule-id">
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Новая дата:</label>
+            <input type="date" id="move-date" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+        </div>
+        <div class="flex space-x-2">
+            <button onclick="executeMove()" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                Переместить
+            </button>
+            <button onclick="closeMoveDialog()" class="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">
+                Отмена
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="schedule-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-[450px]">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">
+            <i class="fas fa-calendar-plus mr-2 text-blue-600"></i>Планирование заказа
+        </h3>
+        <input type="hidden" id="schedule-order-id">
+        <input type="hidden" id="schedule-production-type">
+        
+        <div class="mb-4">
+            <p class="text-sm text-gray-600 mb-3" id="schedule-order-name"></p>
+            
+            <!-- Дата начала -->
+            <label class="block text-sm font-medium text-gray-700 mb-2">Дата начала производства:</label>
+            <input type="date" id="schedule-start-date" 
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2"
+                   min="">
+        </div>
+
+        <!-- Срочный заказ (только для штучного производства) -->
+        <div id="urgent-section" class="mb-4">
+            <label class="flex items-center space-x-3 cursor-pointer">
+                <input type="checkbox" id="schedule-is-urgent" class="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                <div>
+                    <span class="text-sm font-medium text-gray-900">Срочный заказ</span>
+                    <p class="text-xs text-gray-500 italic">Срочные заказы вставляются впереди не срочных. Не срочные заказы будут сдвинуты.</p>
+                </div>
+            </label>
+        </div>
+
+        <!-- Информация для партийного производства -->
+        <div id="batch-info" class="hidden mb-4">
+            <p class="text-xs text-gray-500 italic">Партийное производство: приоритет обычный</p>
+        </div>
+
+        <div class="flex space-x-2">
+            <button onclick="executeSchedule()" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700bg-blue-500 transition">
+                <i class="fas fa-check mr-1"></i>Запланировать
+            </button>
+            <button onclick="closeScheduleDialog()" class="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">
+                Отмена
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Coop Operations Dialog -->
+<div id="coop-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-[600px] max-h-[90vh] overflow-y-auto">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">
+            <i class="fas fa-building mr-2 text-purple-600"></i>Кооперативные операции
+        </h3>
+        
+        <p class="text-sm text-gray-600 mb-4">
+            В маршруте заказа есть операции, выполняемые на сторонних предприятиях. 
+            Укажите количество рабочих дней для каждой операции:
+        </p>
+        
+        <div id="coop-operations-list" class="mb-4 space-y-3">
+            <!-- Заполняется динамически -->
+        </div>
+
+        <div class="flex space-x-2">
+            <button onclick="proceedWithCoopSchedule()" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                <i class="fas fa-check mr-1"></i>Продолжить
+            </button>
+            <button onclick="closeCoopDialog()" class="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">
+                Отмена
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Conflict Dialog -->
+<div id="conflict-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-[750px] max-h-[90vh] overflow-y-auto">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">
+            <i class="fas fa-exclamation-triangle mr-2 text-amber-600"></i>Обнаружены конфликты планирования
+        </h3>
+
+        <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm">
+            <p class="text-amber-800 font-semibold mb-1">
+                <i class="fas fa-clock mr-1"></i>
+                Станки заняты другими заказами. Выберите альтернативные станки или оставьте текущие:
+            </p>
+        </div>
+
+        <!-- Список конфликтных операций -->
+        <div id="conflict-operations-list" class="mb-4 space-y-3">
+            <!-- Заполняется динамически -->
+        </div>
+
+        <!-- Кнопки действий -->
+        <div class="flex space-x-2 pt-3 border-t border-gray-200">
+            <button onclick="resolveConflictAndSave()" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                <i class="fas fa-check mr-1"></i>Применить и запланировать
+            </button>
+            <button onclick="planWithoutReplacement()" class="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition border border-gray-300">
+                <i class="fas fa-calendar-alt mr-1"></i>Продолжить без замены станков
+            </button>
+            <button onclick="closeConflictDialog()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">
+                Отмена
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Template для строки конфликта (используется JS) -->
+<template id="conflict-row-template">
+    <div class="conflict-row bg-white border border-gray-200 rounded-lg p-3">
+        <div class="flex items-start justify-between">
+            <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="conflict-seq font-bold text-blue-600"></span>
+                    <span class="conflict-op-name text-gray-800 font-medium"></span>
+                </div>
+                <div class="conflict-info text-xs text-gray-500 ml-1"></div>
+                <div class="conflict-with text-xs text-red-500 ml-1 mt-0.5"></div>
+            </div>
+            <div class="ml-4 w-56">
+                <label class="block text-xs font-medium text-gray-600 mb-1">Станок:</label>
+                <select class="conflict-equipment-select w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
+                    <!-- Опции заполняются динамически -->
+                </select>
+                <div class="conflict-equipment-note text-xs text-gray-400 mt-1 italic"></div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Toast notification -->
+<div id="toast" class="fixed bottom-4 right-4 px-6 py-3 bg-green-600 text-white rounded-lg shadow-lg transform translate-y-full transition-transform duration-300 z-50">
+    <span id="toast-message"></span>
+</div>
+
+<!-- Loading overlay -->
+<div id="loading-overlay" class="hidden fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl p-8 flex flex-col items-center">
+        <i class="fas fa-spinner fa-spin text-4xl text-blue-600 mb-3"></i>
+        <span class="text-lg font-medium text-gray-900">Загрузка...</span>
+    </div>
+</div>
+
+<script>
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    const toastMessage = document.getElementById('toast-message');
+    toastMessage.textContent = message;
+    toast.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg transform transition-transform duration-300 z-50 ${type === 'error' ? 'bg-red-600' : 'bg-green-600'}`;
+    toast.classList.remove('translate-y-full');
+    toast.classList.add('translate-y-0');
+    setTimeout(() => {
+        toast.classList.remove('translate-y-0');
+        toast.classList.add('translate-y-full');
+    }, 3000);
+}
+
+function showLoading() {
+    document.getElementById('loading-overlay').classList.remove('hidden');
+}
+
+function hideLoading() {
+    document.getElementById('loading-overlay').classList.add('hidden');
+}
+
+function filterOrders() {
+    const status = document.getElementById('status-filter').value;
+    const search = document.getElementById('search-orders').value.toLowerCase();
+    const cards = document.querySelectorAll('.order-card');
+
+    cards.forEach(card => {
+        const cardStatus = card.dataset.status;
+        const detailName = card.dataset.detailName || '';
+        const designation = card.dataset.designation || '';
+        const matchesStatus = status === 'all' || cardStatus === status;
+        const matchesSearch = !search || detailName.includes(search) || designation.includes(search);
+        card.style.display = (matchesStatus && matchesSearch) ? '' : 'none';
+    });
+}
+
+async function calculateOrderScheduleInline(orderId, btn) {
+    if (!confirm('Рассчитать расписание для этого заказа?')) return;
+
+    // Показываем что кнопка занята
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    }
+
+    // Сохраняем позицию прокрутки
+    sessionStorage.setItem('scrollPosition', window.scrollY);
+
+    try {
+        const response = await fetch(`/planning/api/calculate/${orderId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const result = await response.json();
+        if (result.success) {
+            showToast('✅ Расписание рассчитано успешно');
+            // Перезагружаем страницу через 500мс
+            setTimeout(function() {
+                window.location.reload();
+            }, 500);
+        } else {
+            showToast(result.message || 'Ошибка расчёта', 'error');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-calculator"></i>';
+            }
+        }
+    } catch (e) {
+        showToast('Ошибка сети: ' + e.message, 'error');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-calculator"></i>';
+        }
+    }
+}
+
+async function clearOrderScheduleInline(orderId, btn) {
+    if (!confirm('Убрать заказ из плана?\n\nЭто удалит:\n• Все операции из календаря\n• Установленные даты начала/окончания\n• Кеш планирования\n\nЗаказ останется в системе как "Не запланированный"')) return;
+
+    // Показываем что кнопка занята
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    }
+
+    // Сохраняем позицию прокрутки
+    sessionStorage.setItem('scrollPosition', window.scrollY);
+
+    try {
+        const response = await fetch(`/planning/api/orders/${orderId}/clear-schedule`, { method: 'POST' });
+        const result = await response.json();
+        if (result.success) {
+            // Очищаем кеш браузера для этой страницы
+            if ('caches' in window) {
+                const cacheNames = await caches.keys();
+                await Promise.all(cacheNames.map(name => caches.delete(name)));
+            }
+            
+            showToast('✅ Заказ убран из плана');
+            // Перезагружаем страницу через 500мс с очисткой кеша
+            setTimeout(function() {
+                window.location.reload(true);
+            }, 500);
+        } else {
+            showToast('Ошибка при удалении расписания', 'error');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-calendar-times"></i>';
+            }
+        }
+    } catch (e) {
+        showToast('Ошибка сети: ' + e.message, 'error');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-calendar-times"></i>';
+        }
+    }
+}
+
+async function deleteOrderInline(orderId, btn) {
+    if (!confirm('Удалить этот заказ? Это действие необратимо!')) return;
+    
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    }
+    
+    // Сохраняем позицию прокрутки
+    sessionStorage.setItem('scrollPosition', window.scrollY);
+    
+    try {
+        const response = await fetch(`/planning/api/orders/${orderId}`, {
+            method: 'DELETE',
+        });
+        const result = await response.json();
+        if (result.success) {
+            showToast('✅ Заказ удалён');
+            setTimeout(function() {
+                window.location.reload();
+            }, 500);
+        } else {
+            showToast(result.message || 'Ошибка удаления', 'error');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-trash"></i>';
+            }
+        }
+    } catch (e) {
+        showToast('Ошибка сети: ' + e.message, 'error');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-trash"></i>';
+        }
+    }
+}
+
+// Подсветка и прокрутка к новому заказу
+document.addEventListener('DOMContentLoaded', function() {
+    {% if highlight_order %}
+    const highlightEl = document.getElementById('order-{{ highlight_order }}');
+    if (highlightEl) {
+        // Прокрутка к элементу
+        highlightEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Убираем подсветку через 3 секунды
+        setTimeout(() => {
+            highlightEl.classList.remove('ring-4', 'ring-yellow-400', 'bg-yellow-50');
+            highlightEl.classList.add('border-l-4', 'border-l-green-500', 'bg-green-50');
+        }, 3000);
+    }
+    {% endif %}
+
+    // Устанавливаем минимальную дату для планирования (сегодня)
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('schedule-start-date').setAttribute('min', today);
+    
+    // Initialize drag and drop for schedule items
+    initScheduleDragAndDrop();
+    
+    // Восстанавливаем позицию прокрутки
+    const scrollPos = sessionStorage.getItem('scrollPosition');
+    if (scrollPos) {
+        window.scrollTo(0, parseInt(scrollPos));
+        sessionStorage.removeItem('scrollPosition');
+    }
+});
+
+// ==================== SCHEDULE DIALOG ====================
+
+// Drag and Drop for schedule items
+let draggedScheduleItem = null;
+
+function initScheduleDragAndDrop() {
+    const items = document.querySelectorAll('.schedule-item-draggable');
+    
+    items.forEach(item => {
+        item.setAttribute('draggable', 'true');
+        item.style.cursor = 'grab';
+        
+        item.addEventListener('dragstart', function(e) {
+            draggedScheduleItem = this;
+            this.style.opacity = '0.5';
+            e.dataTransfer.setData('text/plain', this.dataset.scheduleId || '');
+            e.dataTransfer.effectAllowed = 'move';
+        });
+        
+        item.addEventListener('dragend', function() {
+            this.style.opacity = '1';
+            draggedScheduleItem = null;
+        });
+        
+        item.addEventListener('dblclick', function() {
+            const scheduleId = this.dataset.scheduleId;
+            if (scheduleId) {
+                openMoveDialog(scheduleId);
+            }
+        });
+    });
+}
+
+function openMoveDialog(scheduleId) {
+    document.getElementById('move-schedule-id').value = scheduleId;
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('move-date').value = today;
+    document.getElementById('move-date').min = today;
+    document.getElementById('move-dialog').classList.remove('hidden');
+}
+
+function closeMoveDialog() {
+    document.getElementById('move-dialog').classList.add('hidden');
+}
+
+async function executeMove() {
+    const scheduleId = document.getElementById('move-schedule-id').value;
+    const newDate = document.getElementById('move-date').value;
+
+    if (!newDate) {
+        showToast('Выберите дату', 'error');
+        return;
+    }
+
+    // Сохраняем позицию прокрутки
+    sessionStorage.setItem('scrollPosition', window.scrollY);
+
+    closeMoveDialog();
+
+    try {
+        const response = await fetch(`/planning/api/schedule/${scheduleId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ planned_date: newDate })
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            showToast('✅ Дата обновлена');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showToast(result.message || 'Ошибка', 'error');
+        }
+    } catch (e) {
+        showToast('Ошибка сети: ' + e.message, 'error');
+    }
+}
+
+function openScheduleDialogFromButton(button) {
+    console.log('=== openScheduleDialogFromButton CALLED ===');
+    console.log('button element:', button);
+    console.log('button.dataset:', button.dataset);
+    
+    const orderId = button.dataset.orderId;
+    const detailName = button.dataset.detailName || 'Деталь';
+    const productionType = button.dataset.productionType || 'piece';
+    
+    console.log('Extracted values:', { orderId, detailName, productionType });
+    
+    if (!orderId) {
+        console.error('orderId is missing!');
+        alert('Ошибка: orderId не найден');
+        return;
+    }
+    
+    // Сначала проверяем есть ли кооперативные операции
+    fetchCoopOperations(orderId, detailName, productionType);
+}
+
+async function fetchCoopOperations(orderId, detailName, productionType) {
+    console.log('=== fetchCoopOperations called ===');
+    console.log('orderId:', orderId);
+    try {
+        const response = await fetch(`/planning/api/order/${orderId}/coop-operations`);
+        console.log('Response status:', response.status);
+        const data = await response.json();
+        console.log('Response data:', data);
+        
+        if (data.success && data.has_coop_operations) {
+            console.log('Showing coop dialog');
+            // Показываем диалог с кооперативными операциями
+            showCoopDialog(orderId, detailName, productionType, data.coop_operations);
+        } else {
+            console.log('No coop operations, opening schedule dialog');
+            // Нет кооперативных операций - сразу показываем диалог планирования
+            openScheduleDialog(orderId, detailName, productionType);
+        }
+    } catch (e) {
+        console.error('Error fetching coop operations:', e);
+        // При ошибке всё равно показываем диалог планирования
+        openScheduleDialog(orderId, detailName, productionType);
+    }
+}
+
+function showCoopDialog(orderId, detailName, productionType, coopOperations) {
+    const coopDialog = document.getElementById('coop-dialog');
+    const coopList = document.getElementById('coop-operations-list');
+    
+    // Сохраняем данные в объекте диалога
+    window.pendingScheduleData = { orderId, detailName, productionType };
+    
+    // Строим список кооперативных операций
+    let html = '';
+    coopOperations.forEach((op, index) => {
+        html += `
+        <div class="bg-purple-50 border border-purple-200 rounded-lg p-3">
+            <div class="flex items-center justify-between mb-2">
+                <span class="font-medium text-purple-900">${index + 1}. ${op.operation_name || 'Операция ' + op.sequence_number}</span>
+                <span class="text-sm text-purple-600">Позиция ${op.sequence_number}</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                    <span class="text-gray-600">Предприятие:</span>
+                    <span class="font-medium ml-1">${op.coop_company_name || 'Не указано'}</span>
+                </div>
+                <div>
+                    <span class="text-gray-600">Дней:</span>
+                    <input type="number" 
+                           id="coop-days-${index}" 
+                           value="${op.coop_duration_days || 0}" 
+                           min="0"
+                           class="w-20 px-2 py-1 border border-purple-300 rounded text-center"
+                           onchange="updateCoopDuration(${index}, this.value)">
+                    <span class="text-gray-500">раб. дней</span>
+                </div>
+            </div>
+        </div>`;
+    });
+    
+    coopList.innerHTML = html;
+    coopDialog.classList.remove('hidden');
+}
+
+function updateCoopDuration(index, value) {
+    if (!window.pendingCoopDurations) {
+        window.pendingCoopDurations = {};
+    }
+    window.pendingCoopDurations[index] = parseInt(value) || 0;
+}
+
+function closeCoopDialog() {
+    document.getElementById('coop-dialog').classList.add('hidden');
+    window.pendingScheduleData = null;
+    window.pendingCoopDurations = null;
+}
+
+function proceedWithCoopSchedule() {
+    // Закрываем диалог коопераций
+    document.getElementById('coop-dialog').classList.add('hidden');
+    
+    // Открываем диалог планирования с данными о кооперациях
+    if (window.pendingScheduleData) {
+        const { orderId, detailName, productionType } = window.pendingScheduleData;
+        openScheduleDialog(orderId, detailName, productionType);
+    }
+}
+
+function openScheduleDialog(orderId, detailName, productionType) {
+    console.log('=== openScheduleDialog called ===');
+    console.log('orderId:', orderId);
+    console.log('detailName:', detailName);
+    console.log('productionType:', productionType);
+
+    const orderIdField = document.getElementById('schedule-order-id');
+    const productionTypeField = document.getElementById('schedule-production-type');
+    const orderNameField = document.getElementById('schedule-order-name');
+    const startDateField = document.getElementById('schedule-start-date');
+    const urgentSection = document.getElementById('urgent-section');
+    const batchInfo = document.getElementById('batch-info');
+    const scheduleDialog = document.getElementById('schedule-dialog');
+    
+    console.log('Elements found:');
+    console.log('- orderIdField:', !!orderIdField);
+    console.log('- productionTypeField:', !!productionTypeField);
+    console.log('- orderNameField:', !!orderNameField);
+    console.log('- startDateField:', !!startDateField);
+    console.log('- urgentSection:', !!urgentSection);
+    console.log('- batchInfo:', !!batchInfo);
+    console.log('- scheduleDialog:', !!scheduleDialog);
+    
+    if (!orderIdField || !productionTypeField || !orderNameField || !startDateField || !scheduleDialog) {
+        console.error('One or more dialog elements not found!');
+        showToast('Ошибка: диалог не найден', 'error');
+        return;
+    }
+    
+    orderIdField.value = orderId;
+    productionTypeField.value = productionType;
+    orderNameField.textContent = `Заказ: ${detailName}`;
+    
+    // Устанавливаем сегодняшнюю дату как значение по умолчанию
+    const today = new Date().toISOString().split('T')[0];
+    startDateField.value = today;
+    
+    // Показываем/скрываем секцию срочности в зависимости от типа производства
+    if (productionType === 'piece') {
+        urgentSection.classList.remove('hidden');
+        batchInfo.classList.add('hidden');
+    } else {
+        urgentSection.classList.add('hidden');
+        batchInfo.classList.remove('hidden');
+    }
+    
+    // Сбрасываем чекбокс
+    const urgentCheckbox = document.getElementById('schedule-is-urgent');
+    if (urgentCheckbox) {
+        urgentCheckbox.checked = false;
+    }
+    
+    // Показываем диалог
+    console.log('Showing dialog by removing hidden class...');
+    console.log('Before - scheduleDialog.classList:', scheduleDialog.className);
+    scheduleDialog.classList.remove('hidden');
+    console.log('After - scheduleDialog.classList:', scheduleDialog.className);
+    console.log('=== Dialog should be visible now ===');
+}
+
+function closeScheduleDialog() {
+    document.getElementById('schedule-dialog').classList.add('hidden');
+}
+
+async function executeSchedule() {
+    const orderId = document.getElementById('schedule-order-id').value;
+    const productionType = document.getElementById('schedule-production-type').value;
+    const startDate = document.getElementById('schedule-start-date').value;
+    const isUrgent = document.getElementById('schedule-is-urgent').checked;
+
+    // Валидация
+    if (!startDate) {
+        showToast('Выберите дату начала производства', 'error');
+        return;
+    }
+
+    // Определяем приоритет
+    let priority = 5;
+    if (productionType === 'piece') {
+        priority = isUrgent ? 1 : 5;
+    } else {
+        priority = 3; // Партийное производство - средний приоритет
+    }
+
+    // Сохраняем данные для проверки конфликтов и сохранения
+    window._pendingScheduleData = { orderId, productionType, startDate, isUrgent, priority };
+    
+    // Проверяем конфликты перед сохранением
+    try {
+        const conflictResponse = await fetch('/planning/api/check-conflicts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                start_date: startDate,
+                priority: priority,
+                order_id: orderId
+            })
+        });
+        
+        const conflictResult = await conflictResponse.json();
+        
+        if (conflictResult.success && conflictResult.has_conflict) {
+            // Есть конфликт - показываем диалог
+            showConflictDialogForSchedule(conflictResult);
+            return;
+        }
+        
+        // Нет конфликта - сохраняем
+        await applyScheduleSave();
+    } catch (e) {
+        showToast('Ошибка проверки конфликтов: ' + e.message, 'error');
+    }
+}
+
+function showConflictDialogForSchedule(conflictResult) {
+    const detailsDiv = document.getElementById('conflict-details');
+    const equipmentSelect = document.getElementById('conflict-equipment');
+    
+    // Показываем детали конфликта
+    let detailsHTML = '';
+    
+    if (conflictResult.conflicts && conflictResult.conflicts.length > 0) {
+        detailsHTML += '<p class="font-semibold mt-1">Занято другими заказами:</p>';
+        detailsHTML += '<ul class="list-disc ml-4">';
+        conflictResult.conflicts.forEach(c => {
+            detailsHTML += `<li>${c.designation || 'Без обозначения'} - ${c.detail_name || 'Без имени'} (${c.duration_minutes || 0} мин)</li>`;
+        });
+        detailsHTML += '</ul>';
+    }
+    
+    detailsHTML += `<p class="mt-2 font-semibold">Статистика дня:</p>`;
+    detailsHTML += `<p>• Занято: ${conflictResult.total_busy_minutes || 0} мин из 420 мин (7ч)</p>`;
+    detailsHTML += `<p>• Свободно: ${conflictResult.free_minutes || 0} мин</p>`;
+    
+    if (conflictResult.is_completely_busy) {
+        detailsHTML += `<p class="text-red-800 font-semibold">• Станок полностью занят на этот день</p>`;
+    }
+    
+    detailsDiv.innerHTML = detailsHTML;
+    
+    // Заполняем альтернативные станки
+    equipmentSelect.innerHTML = '<option value="">— Выберите станок —</option>';
+    if (conflictResult.alternative_equipment && conflictResult.alternative_equipment.length > 0) {
+        conflictResult.alternative_equipment.forEach(eq => {
+            const opt = document.createElement('option');
+            opt.value = eq.id;
+            opt.textContent = eq.name;
+            equipmentSelect.appendChild(opt);
+        });
+    } else {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'Нет доступных альтернатив';
+        opt.disabled = true;
+        equipmentSelect.appendChild(opt);
+    }
+    
+    // Сохраняем данные конфликта
+    window._currentConflict = conflictResult;
+    
+    // Сбрасываем radio на "Выбрать другой станок"
+    document.querySelector('input[name="conflict-action"][value="change_equipment"]').checked = true;
+    toggleEquipmentSelect();
+    
+    // Показываем диалог
+    document.getElementById('conflict-dialog').classList.remove('hidden');
+}
+
+async function resolveConflictAndSave() {
+    const action = document.querySelector('input[name="conflict-action"]:checked').value;
+    
+    if (action === 'change_equipment') {
+        const newEquipmentId = document.getElementById('conflict-equipment').value;
+        
+        if (!newEquipmentId) {
+            showToast('Выберите альтернативный станок', 'error');
+            return;
+        }
+        
+        // Обновляем данные сохранения с новым станком
+        window._pendingScheduleData.equipment_id = parseInt(newEquipmentId);
+        
+        closeConflictDialog();
+        
+        // Проверяем снова на конфликты
+        try {
+            const conflictResponse = await fetch('/planning/api/check-conflicts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    equipment_id: parseInt(newEquipmentId),
+                    start_date: window._pendingScheduleData.startDate,
+                    order_id: window._pendingScheduleData.orderId,
+                    priority: window._pendingScheduleData.priority
+                })
+            });
+            
+            const conflictResult = await conflictResponse.json();
+            
+            if (conflictResult.success && conflictResult.has_conflict) {
+                // Снова конфликт - показываем диалог ещё раз
+                showConflictDialogForSchedule(conflictResult);
+                return;
+            }
+            
+            // Нет конфликта - сохраняем
+            await applyScheduleSave();
+        } catch (e) {
+            showToast('Ошибка проверки: ' + e.message, 'error');
+        }
+    } else {
+        // Оставляем тот же станок - система автоматически найдёт свободный день
+        closeConflictDialog();
+        await applyScheduleSave();
+    }
+}
+
+async function applyScheduleSave() {
+    const { orderId, priority, startDate } = window._pendingScheduleData;
+    
+    // Сохраняем позицию прокрутки
+    sessionStorage.setItem('scrollPosition', window.scrollY);
+    
+    try {
+        const response = await fetch(`/planning/api/calculate/${orderId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                start_date: startDate,
+                priority: priority
+            })
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            // Очищаем кеш браузера для этой страницы
+            if ('caches' in window) {
+                const cacheNames = await caches.keys();
+                await Promise.all(cacheNames.map(name => caches.delete(name)));
+            }
+            
+            showToast('✅ Заказ добавлен в план');
+            closeScheduleDialog();
+            closeConflictDialog();
+            // Перезагружаем страницу через 500мс с очисткой кеша
+            setTimeout(function() {
+                window.location.reload(true);
+            }, 500);
+        } else {
+            showToast(result.message || 'Ошибка расчёта', 'error');
+        }
+    } catch (e) {
+        showToast('Ошибка сети: ' + e.message, 'error');
+    }
+}
+
+function toggleEquipmentSelect() {
+    const action = document.querySelector('input[name="conflict-action"]:checked').value;
+    const equipmentSelect = document.getElementById('alternative-equipment-select');
+    
+    if (action === 'change_equipment') {
+        equipmentSelect.style.display = 'block';
+    } else {
+        equipmentSelect.style.display = 'none';
+    }
+}
+
+function closeConflictDialog() {
+    document.getElementById('conflict-dialog').classList.add('hidden');
+}
+</script>
+
+{% endblock %}
+
+{% block extra_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', path='js/planning.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,693 @@
+{% extends "base.html" %}
+
+{% block title %}Настройки планирования{% endblock %}
+
+{% block extra_css %}
+<style>
+.equip-settings-card { transition: all 0.2s; }
+.equip-settings-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.toggle-switch { position: relative; width: 48px; height: 24px; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #d1d5db; border-radius: 24px; transition: 0.3s; }
+.toggle-slider:before { content: ""; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
+.toggle-switch input:checked + .toggle-slider { background: #3b82f6; }
+.toggle-switch input:checked + .toggle-slider:before { transform: translateX(24px); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="bg-white dark:bg-dark-800 border-b border-gray-200 dark:border-dark-700 px-6 py-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                <i class="fas fa-cog mr-2 text-gray-700 dark:text-gray-300"></i>Настройки планирования
+            </h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Управление оборудованием и рабочими днями</p>
+        </div>
+        <div class="flex space-x-2">
+            {% if current_user.role == 'admin' or current_user.screen_permissions is none or 'planning' in current_user.screen_permissions %}
+            <a href="/planning/plan" class="px-4 py-2 bg-gray-200 dark:bg-dark-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-dark-600 transition text-sm">
+                <i class="fas fa-tasks mr-2"></i>План
+            </a>
+            {% endif %}
+            {% if current_user.role == 'admin' or current_user.screen_permissions is none or 'planning_calendar' in current_user.screen_permissions %}
+            <a href="/planning/calendar" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
+                <i class="fas fa-calendar-alt mr-2"></i>Календарь
+            </a>
+            {% endif %}
+            {% if current_user.role == 'admin' or current_user.screen_permissions is none or 'planning_gantt' in current_user.screen_permissions %}
+            <a href="/planning/gantt" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">
+                <i class="fas fa-chart-bar mr-2"></i>Ганта
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="p-6 bg-white dark:bg-dark-800">
+    <!-- Ручное добавление деталей -->
+    <div class="bg-white dark:bg-dark-800 rounded-lg shadow p-4 mb-4">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
+            <i class="fas fa-pen-to-square mr-2 text-blue-600 dark:text-blue-400"></i>Ручное добавление деталей
+        </h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">Разрешить добавлять детали в план без маршрута через календарь</p>
+        <label class="inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="allow-manual-entry" class="sr-only peer"
+                   onchange="toggleManualEntry(this.checked)">
+            <div class="relative w-11 h-6 bg-gray-200 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-100 dark:peer-focus:ring-blue-900 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            <span class="ms-3 text-sm font-medium text-gray-700 dark:text-gray-300" id="manual-entry-label">Включено</span>
+        </label>
+    </div>
+
+    <!-- Equipment Settings -->
+    <div class="bg-white dark:bg-dark-800 rounded-lg shadow mb-6">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-dark-700">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">
+                    <i class="fas fa-industry mr-2 text-blue-600 dark:text-blue-400"></i>Оборудование
+                </h2>
+                <div class="flex space-x-2">
+                    <button onclick="enableAll()" class="px-3 py-1.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-sm hover:bg-green-200 dark:hover:bg-green-900/50">
+                        Включить все
+                    </button>
+                    <button onclick="disableAll()" class="px-3 py-1.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg text-sm hover:bg-red-200 dark:hover:bg-red-900/50">
+                        Отключить все
+                    </button>
+                    <button onclick="saveAllSettings()" id="save-btn" class="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+                        <i class="fas fa-save mr-1"></i>Сохранить
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="divide-y divide-gray-200 dark:divide-dark-700">
+            <div class="p-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {% for eq in equipment|sort(attribute='name') %}
+                    <div class="equip-settings-card bg-gray-50 dark:bg-dark-700 rounded-lg p-4" data-equipment-id="{{ eq.id }}">
+                        <div class="flex items-start justify-between mb-3">
+                            <div class="flex-1 mr-3">
+                                <h4 class="font-medium text-gray-900 dark:text-gray-100 text-sm">{{ eq.name }}</h4>
+                                {% if eq.inventory_number %}
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Инв. №: {{ eq.inventory_number }}</p>
+                                {% endif %}
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" class="equip-toggle" data-equipment-id="{{ eq.id }}"
+                                       {% if eq.is_active %}checked{% endif %}
+                                       onchange="updateEquipStatus(this)">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="space-y-2">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Рабочие часы:</label>
+                                <input type="number" min="1" max="24" value="{{ eq.default_working_hours or 7 }}"
+                                       class="equip-hours w-full border border-gray-300 dark:border-dark-600 dark:bg-dark-600 dark:text-gray-100 rounded px-2 py-1 text-sm"
+                                       data-equipment-id="{{ eq.id }}">
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-gray-500 dark:text-gray-400">Статус:</span>
+                                <span class="equip-status-text {% if eq.is_active %}text-green-600 dark:text-green-400{% else %}text-red-600 dark:text-red-400{% endif %}">
+                                    {% if eq.is_active %}Включён{% else %}Отключён{% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {% if not equipment %}
+            <div class="p-12 text-center text-gray-500 dark:text-gray-400">
+                <i class="fas fa-industry text-4xl text-gray-300 dark:text-gray-600 mb-3 block"></i>
+                <p>Нет оборудования</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Equipment Calendar (Month View) -->
+    <div class="bg-white dark:bg-dark-800 rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-dark-700">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">
+                    <i class="fas fa-calendar mr-2 text-blue-600 dark:text-blue-400"></i>Календарь рабочих дней
+                </h2>
+                <div class="flex items-center space-x-3">
+                    <select id="calendar-equip-select" class="border border-gray-300 dark:border-dark-600 dark:bg-dark-600 dark:text-gray-100 rounded-lg px-3 py-1.5 text-sm" onchange="renderCalendar()">
+                        <option value="__all__">Все станки</option>
+                        {% for eq in equipment %}
+                        <option value="{{ eq.id }}">{{ eq.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">
+                        <span class="inline-block w-3 h-3 bg-green-100 dark:bg-green-900/30 rounded mr-1"></span>Рабочий
+                        <span class="inline-block w-3 h-3 bg-red-100 dark:bg-red-900/30 rounded ml-2 mr-1"></span>Нерабочий
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-6">
+            <!-- Month Navigation -->
+            <div class="flex items-center justify-center mb-4">
+                <button onclick="prevMonth()" class="p-2 hover:bg-gray-100 dark:hover:bg-dark-700 rounded-lg">
+                    <i class="fas fa-chevron-left text-gray-700 dark:text-gray-300"></i>
+                </button>
+                <h3 class="text-lg font-bold mx-4 text-gray-900 dark:text-gray-100" id="calendar-month-label">{{ month_name }} {{ year }}</h3>
+                <button onclick="nextMonth()" class="p-2 hover:bg-gray-100 dark:hover:bg-dark-700 rounded-lg">
+                    <i class="fas fa-chevron-right text-gray-700 dark:text-gray-300"></i>
+                </button>
+                <button onclick="goToCurrentMonth()" class="ml-4 px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm hover:bg-blue-200 dark:hover:bg-blue-900/50">
+                    Сегодня
+                </button>
+            </div>
+
+            <!-- Calendar Grid -->
+            <div class="flex justify-center">
+                <div class="w-full max-w-xl">
+                    <!-- Day headers -->
+                    <div class="grid grid-cols-7 gap-0.5 mb-1">
+                        {% for day_name in ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'] %}
+                        <div class="text-center text-sm font-bold text-gray-600 dark:text-gray-300 py-2">{{ day_name }}</div>
+                        {% endfor %}
+                    </div>
+                    <!-- Days -->
+                    <div class="grid grid-cols-7 gap-0.5 justify-items-center" id="calendar-days">
+                        <!-- Empty cells before first day -->
+                        {% for _ in range(first_day_weekday) %}
+                        <div></div>
+                        {% endfor %}
+                        <!-- Days -->
+                        {% for day in range(1, days_in_month + 1) %}
+                        {% set date_str = '%04d-%02d-%02d'|format(year, month, day) %}
+                        {% set is_today = (day == now.day and month == now.month and year == now.year) %}
+
+                        {# Check calendar data #}
+                        {% set has_explicit = false %}
+                        {% set is_working_day = false %}
+                        {% for cal in calendar_data %}
+                            {% if cal.date == date_str %}
+                                {% set has_explicit = true %}
+                                {% set is_working_day = cal.is_working %}
+                            {% endif %}
+                        {% endfor %}
+
+                        {# Если нет записи — Пн-Пт рабочие, Сб-Вс выходные #}
+                        {% if not has_explicit %}
+                            {% set weekday_idx = (first_day_weekday + day - 1) % 7 %}
+                            {% if weekday_idx < 5 %}
+                                {% set is_working_day = true %}
+                            {% endif %}
+                        {% endif %}
+
+                        {# Цвета для обводки и фона #}
+                        {% if is_working_day %}
+                            {% set border_color = '#34d399' %}
+                            {% set bg_color = '#d1fae5' %}
+                            {% set text_color = '#065f46' %}
+                            {% set indicator = '✓' %}
+                            {% set indicator_color = '#059669' %}
+                        {% else %}
+                            {% set border_color = '#f87171' %}
+                            {% set bg_color = '#fee2e2' %}
+                            {% set text_color = '#991b1b' %}
+                            {% set indicator = '✗' %}
+                            {% set indicator_color = '#dc2626' %}
+                        {% endif %}
+
+                        {% if is_today %}
+                            {% set border_color = '#3b82f6' %}
+                            {% set border_width = '3px' %}
+                        {% else %}
+                            {% set border_width = '2px' %}
+                        {% endif %}
+
+                        <div class="day-wrapper"
+                             data-date="{{ date_str }}"
+                             onclick="openDayDialog(this, '{{ date_str }}')"
+                             title="Нажмите для выбора типа дня"
+                             style="border: {{ border_width }} solid {{ border_color }}; border-radius: 8px; padding: 0; cursor: pointer; transition: transform 0.15s; user-select: none; margin: 1px;">
+                            <div class="day-inner" style="background: {{ bg_color }}; color: {{ text_color }}; border-radius: 6px; aspect-ratio: 1/1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: clamp(12px, 2vw, 15px); font-weight: 700; line-height: 1;">
+                                <span>{{ day }}</span>
+                                <span class="day-indicator" style="font-size: clamp(8px, 1.5vw, 11px); color: {{ indicator_color }}; line-height: 1; margin-top: 2px;">{{ indicator }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Legend -->
+            <div class="flex justify-center mt-6 space-x-8">
+                <div class="flex items-center space-x-2">
+                    <div class="w-5 h-5 bg-green-100 rounded border-2 border-green-400"></div>
+                    <span class="text-sm text-gray-700 dark:text-gray-300">Рабочий день</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <div class="w-5 h-5 bg-red-100 rounded border-2 border-red-400"></div>
+                    <span class="text-sm text-gray-700 dark:text-gray-300">Выходной</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <div class="w-5 h-5 bg-gray-100 rounded border-2 border-gray-300"></div>
+                    <span class="text-sm text-gray-700 dark:text-gray-300">По умолчанию (Пн-Пт)</span>
+                </div>
+            </div>
+
+            <p class="text-sm text-gray-500 dark:text-gray-400 text-center mt-4">
+                Нажмите на день, чтобы выбрать тип дня для выбранного станка
+            </p>
+        </div>
+    </div>
+
+    <!-- Day Type Dialog -->
+    <div id="day-dialog" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50" onclick="closeDayDialog(event)">
+        <div class="bg-white dark:bg-dark-800 rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4" onclick="event.stopPropagation()">
+            <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2 text-center">
+                <i class="fas fa-calendar-day mr-2 text-blue-600"></i>Тип дня
+            </h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 text-center mb-1" id="dialog-date"></p>
+            <p class="text-xs text-gray-400 dark:text-gray-500 text-center mb-6" id="dialog-equipment"></p>
+
+            <!-- Кнопки для одного станка -->
+            <div id="dialog-single-buttons" class="space-y-3">
+                <button onclick="setDayType(true, false)" class="w-full py-4 px-6 bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:hover:bg-green-900/50 text-green-800 dark:text-green-200 rounded-xl font-semibold transition flex items-center justify-center space-x-3">
+                    <i class="fas fa-check-circle text-2xl text-green-600 dark:text-green-400"></i>
+                    <span>Рабочий день</span>
+                </button>
+                <button onclick="setDayType(false, false)" class="w-full py-4 px-6 bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-red-800 dark:text-red-200 rounded-xl font-semibold transition flex items-center justify-center space-x-3">
+                    <i class="fas fa-times-circle text-2xl text-red-600 dark:text-red-400"></i>
+                    <span>Выходной</span>
+                </button>
+            </div>
+
+            <!-- Разделитель -->
+            <div class="relative my-4">
+                <div class="absolute inset-0 flex items-center">
+                    <div class="w-full border-t border-gray-200 dark:border-dark-600"></div>
+                </div>
+                <div class="relative flex justify-center text-xs">
+                    <span class="px-3 bg-white dark:bg-dark-800 text-gray-400">для всех станков</span>
+                </div>
+            </div>
+
+            <!-- Кнопки для всех станков -->
+            <div id="dialog-all-buttons" class="space-y-3">
+                <button onclick="setDayType(true, true)" class="w-full py-3 px-6 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/40 text-green-700 dark:text-green-300 rounded-xl font-medium transition flex items-center justify-center space-x-2 border border-green-200 dark:border-green-800">
+                    <i class="fas fa-check-double text-green-600 dark:text-green-400"></i>
+                    <span>Рабочий для всех</span>
+                </button>
+                <button onclick="setDayType(false, true)" class="w-full py-3 px-6 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-700 dark:text-red-300 rounded-xl font-medium transition flex items-center justify-center space-x-2 border border-red-200 dark:border-red-800">
+                    <i class="fas fa-times-double text-red-600 dark:text-red-400"></i>
+                    <span>Выходной для всех</span>
+                </button>
+            </div>
+
+            <button onclick="closeDayDialog()" class="w-full py-3 px-6 bg-gray-100 hover:bg-gray-200 dark:bg-dark-700 dark:hover:bg-dark-600 text-gray-700 dark:text-gray-300 rounded-xl font-medium transition mt-3">
+                Отмена
+            </button>
+        </div>
+    </div>
+
+    <!-- Help Section -->
+    <div class="mt-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+        <h3 class="text-sm font-bold text-amber-900 dark:text-amber-300 mb-2">
+            <i class="fas fa-info-circle mr-1"></i>Справка
+        </h3>
+        <ul class="text-xs text-amber-800 dark:text-amber-200 space-y-1">
+            <li>• Выберите станок из списка для настройки</li>
+            <li>• Укажите часы работы по умолчанию (7 часов)</li>
+            <li>• Включите/отключите станок из планирования</li>
+            <li>• Нажмите на день в календаре — появится выбор рабочего/выходного</li>
+            <li>• Нажмите "Сохранить" для сохранения всех изменений оборудования</li>
+        </ul>
+    </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-4 right-4 px-6 py-3 bg-green-600 dark:bg-green-700 text-white rounded-lg shadow-lg transform translate-y-full transition-transform duration-300 z-50">
+    <span id="toast-message"></span>
+</div>
+
+<script>
+let calendarYear = {{ year }};
+let calendarMonth = {{ month }};
+const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+let calendarCache = {};
+let selectedDay = { date: null, element: null };
+
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    document.getElementById('toast-message').textContent = message;
+    toast.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg transform transition-transform duration-300 z-50 ${type === 'error' ? 'bg-red-600' : 'bg-green-600'}`;
+    toast.classList.remove('translate-y-full');
+    toast.classList.add('translate-y-0');
+    setTimeout(() => { toast.classList.remove('translate-y-0'); toast.classList.add('translate-y-full'); }, 3000);
+}
+
+function updateEquipStatus(checkbox) {
+    const card = checkbox.closest('.equip-settings-card');
+    const statusText = card.querySelector('.equip-status-text');
+    if (checkbox.checked) {
+        statusText.textContent = 'Включён';
+        statusText.className = 'equip-status-text text-green-600 dark:text-green-400';
+    } else {
+        statusText.textContent = 'Отключён';
+        statusText.className = 'equip-status-text text-red-600 dark:text-red-400';
+    }
+}
+
+async function saveAllSettings() {
+    const saveBtn = document.getElementById('save-btn');
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Сохранение...';
+
+    const toggles = document.querySelectorAll('.equip-toggle');
+    const hoursInputs = document.querySelectorAll('.equip-hours');
+    const updates = [];
+
+    // Собираем данные из всех карточек
+    const equipmentCards = document.querySelectorAll('.equip-settings-card');
+    for (const card of equipmentCards) {
+        const eqId = card.dataset.equipmentId;
+        const toggle = card.querySelector('.equip-toggle');
+        const hoursInput = card.querySelector('.equip-hours');
+
+        updates.push({
+            equipment_id: parseInt(eqId),
+            is_active: toggle.checked,
+            default_working_hours: parseInt(hoursInput.value) || 7
+        });
+    }
+
+    try {
+        const response = await fetch('/planning/api/equipment/bulk-update-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updates: updates })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            showToast(`Настройки сохранены: ${result.success_count} обновлено`);
+        } else {
+            showToast('Ошибка: ' + (result.message || 'Неизвестная'), 'error');
+        }
+    } catch (e) {
+        showToast('Ошибка сети: ' + e.message, 'error');
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="fas fa-save mr-1"></i>Сохранить';
+    }
+}
+
+function enableAll() {
+    document.querySelectorAll('.equip-toggle').forEach(cb => {
+        cb.checked = true;
+        updateEquipStatus(cb);
+    });
+}
+
+function disableAll() {
+    document.querySelectorAll('.equip-toggle').forEach(cb => {
+        cb.checked = false;
+        updateEquipStatus(cb);
+    });
+}
+
+async function renderCalendar() {
+    const select = document.getElementById('calendar-equip-select');
+    const selectedEq = select.value;
+    const yearMonth = `${calendarYear}-${String(calendarMonth).padStart(2, '0')}`;
+    const cacheKey = `${selectedEq}_${yearMonth}`;
+
+    // Проверяем кэш
+    if (calendarCache[cacheKey]) {
+        updateCalendarDisplay(calendarCache[cacheKey]);
+        return;
+    }
+
+    try {
+        const dateFrom = `${calendarYear}-${String(calendarMonth).padStart(2, '0')}-01`;
+        const lastDay = new Date(calendarYear, calendarMonth, 0).getDate();
+        const dateTo = `${calendarYear}-${String(calendarMonth).padStart(2, '0')}-${lastDay}`;
+
+        const endpoint = selectedEq === '__all__'
+            ? `/planning/api/equipment-calendar?date_from=${dateFrom}&date_to=${dateTo}`
+            : `/planning/api/equipment-calendar/${selectedEq}?date_from=${dateFrom}&date_to=${dateTo}`;
+
+        const response = await fetch(endpoint);
+        const data = await response.json();
+
+        if (data.success) {
+            calendarCache[cacheKey] = data.calendar || [];
+            updateCalendarDisplay(data.calendar || []);
+        } else {
+            showToast('Ошибка загрузки календаря', 'error');
+        }
+    } catch (e) {
+        showToast('Ошибка сети: ' + e.message, 'error');
+    }
+}
+
+function updateCalendarDisplay(calendarData) {
+    // Обновляем заголовок месяца
+    document.getElementById('calendar-month-label').textContent = `${monthNames[calendarMonth - 1]} ${calendarYear}`;
+
+    // Получаем "сегодня" для сравнения
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    // Обновляем дни — используем day-wrapper (border) и day-inner (background)
+    const wrappers = document.querySelectorAll('.day-wrapper');
+    wrappers.forEach(wrapper => {
+        const date = wrapper.dataset.date;
+        const inner = wrapper.querySelector('.day-inner');
+        if (!inner) return;
+
+        const entry = calendarData.find(c => {
+            const d = typeof c.date === 'string' ? c.date : (c.date || '').substring(0, 10);
+            return d === date;
+        });
+
+        // Определяем тип дня
+        let isWorking;
+        if (entry) {
+            isWorking = entry.is_working;
+        } else {
+            const dateObj = new Date(date + 'T00:00:00');
+            const dow = dateObj.getDay();
+            isWorking = !(dow === 0 || dow === 6);
+        }
+
+        const isToday = (date === todayStr);
+
+        // Цвета
+        const workingBorder = '#34d399';
+        const workingBg = '#d1fae5';
+        const workingText = '#065f46';
+        const workingIndicator = '#059669';
+        const nonWorkingBorder = '#f87171';
+        const nonWorkingBg = '#fee2e2';
+        const nonWorkingText = '#991b1b';
+        const nonWorkingIndicator = '#dc2626';
+        const todayBorder = '#3b82f6';
+
+        const borderColor = isToday ? todayBorder : (isWorking ? workingBorder : nonWorkingBorder);
+        const borderWidth = isToday ? '3px' : '2px';
+        const bgColor = isWorking ? workingBg : nonWorkingBg;
+        const textColor = isWorking ? workingText : nonWorkingText;
+        const indicatorColor = isWorking ? workingIndicator : nonWorkingIndicator;
+        const indicator = isWorking ? '✓' : '✗';
+
+        // Применяем inline-стили — Tailwind НЕ может переопределить inline style
+        wrapper.style.border = `${borderWidth} solid ${borderColor}`;
+        inner.style.background = bgColor;
+        inner.style.color = textColor;
+
+        // Обновляем индикатор
+        const indEl = inner.querySelector('.day-indicator');
+        if (indEl) {
+            indEl.style.color = indicatorColor;
+            indEl.textContent = indicator;
+        }
+    });
+}
+
+function openDayDialog(element, date) {
+    const select = document.getElementById('calendar-equip-select');
+    const eqId = select.value;
+    const isAllEq = eqId === '__all__';
+
+    selectedDay = { date, element, eqId, isAllEq };
+
+    const parts = date.split('-');
+    const formatted = `${parts[2]}.${parts[1]}.${parts[0]}`;
+    document.getElementById('dialog-date').textContent = `${formatted}`;
+
+    const eqName = select.options[select.selectedIndex].text;
+    document.getElementById('dialog-equipment').textContent = isAllEq ? 'Все станки' : eqName;
+
+    const singleBtns = document.getElementById('dialog-single-buttons');
+    const allBtns = document.getElementById('dialog-all-buttons');
+    if (isAllEq) {
+        singleBtns.classList.add('hidden');
+        allBtns.classList.remove('hidden');
+    } else {
+        singleBtns.classList.remove('hidden');
+        allBtns.classList.remove('hidden');
+    }
+
+    const dialog = document.getElementById('day-dialog');
+    dialog.classList.remove('hidden');
+    dialog.classList.add('flex');
+}
+
+function closeDayDialog(event) {
+    if (event && event.target !== event.currentTarget) return;
+    const dialog = document.getElementById('day-dialog');
+    dialog.classList.add('hidden');
+    dialog.classList.remove('flex');
+    selectedDay = { date: null, element: null };
+}
+
+async function setDayType(isWorking, forAll) {
+    const { date, element, eqId, isAllEq } = selectedDay;
+    if (!date) return;
+
+    // Если выбрано "Все станки" или нажата "для всех" — применяем ко всем
+    const applyToAll = isAllEq || forAll;
+
+    try {
+        let success = false;
+
+        if (applyToAll) {
+            // Применяем ко всем станкам
+            const allOptions = document.getElementById('calendar-equip-select').options;
+            const allEqIds = [];
+            for (let i = 1; i < allOptions.length; i++) {
+                if (allOptions[i].value !== '__all__') {
+                    allEqIds.push(allOptions[i].value);
+                }
+            }
+
+            let successCount = 0;
+            for (const id of allEqIds) {
+                const response = await fetch(`/planning/api/equipment-calendar/${id}/day`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date, is_working: isWorking, working_hours: 7 })
+                });
+                const result = await response.json();
+                if (result.success) successCount++;
+            }
+
+            success = successCount > 0;
+            showToast(`${date}: ${isWorking ? '✓ рабочий' : '✗ выходной'} для ${successCount} станков`);
+        } else {
+            // Только для выбранного станка
+            const response = await fetch(`/planning/api/equipment-calendar/${eqId}/day`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date, is_working: isWorking, working_hours: 7 })
+            });
+            const result = await response.json();
+            success = result.success;
+
+            if (success) {
+                showToast(`${date}: ${isWorking ? '✓ рабочий' : '✗ выходной'}`);
+            } else {
+                showToast('Ошибка: ' + (result.message || 'Неизвестная'), 'error');
+            }
+        }
+
+        if (success) {
+            // Инвалидируем кэш и перерисовываем
+            const yearMonth = `${calendarYear}-${String(calendarMonth).padStart(2, '0')}`;
+            delete calendarCache[`__all___${yearMonth}`];
+            renderCalendar();
+        }
+    } catch (e) {
+        console.error('[Calendar] Error:', e);
+        showToast('Ошибка сети: ' + e.message, 'error');
+    }
+
+    closeDayDialog();
+}
+
+function prevMonth() {
+    if (calendarMonth === 1) {
+        calendarMonth = 12;
+        calendarYear--;
+    } else {
+        calendarMonth--;
+    }
+    renderCalendar();
+}
+
+function nextMonth() {
+    if (calendarMonth === 12) {
+        calendarMonth = 1;
+        calendarYear++;
+    } else {
+        calendarMonth++;
+    }
+    renderCalendar();
+}
+
+function goToCurrentMonth() {
+    const now = new Date();
+    calendarYear = now.getFullYear();
+    calendarMonth = now.getMonth() + 1;
+    renderCalendar();
+}
+
+// Initial render
+document.addEventListener('DOMContentLoaded', () => {
+    renderCalendar();
+
+    // Загрузка настройки ручного добавления
+    const checkbox = document.getElementById('allow-manual-entry');
+    if (checkbox) {
+        fetch('/planning/api/settings/manual-entry')
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    checkbox.checked = data.allow_manual_entry;
+                    document.getElementById('manual-entry-label').textContent =
+                        data.allow_manual_entry ? 'Включено' : 'Отключено';
+                }
+            })
+            .catch(() => {});
+    }
+});
+
+async function toggleManualEntry(checked) {
+    const label = document.getElementById('manual-entry-label');
+    try {
+        const response = await fetch('/planning/api/settings/manual-entry', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ allow_manual_entry: checked }),
+        });
+        const result = await response.json();
+        if (result.success) {
+            label.textContent = checked ? 'Включено' : 'Отключено';
+            showToast(checked ? '✅ Ручное добавление включено' : '🚫 Ручное добавление отключено');
+        } else {
+            showToast('❌ ' + (result.message || 'Ошибка'), 'error');
+            // Revert checkbox state
+            const checkbox = document.getElementById('allow-manual-entry');
+            if (checkbox) checkbox.checked = !checked;
+        }
+    } catch (e) {
+        showToast('❌ Ошибка сети: ' + e.message, 'error');
+        const checkbox = document.getElementById('allow-manual-entry');
+        if (checkbox) checkbox.checked = !checked;
+    }
+}
+</script>
+
+{% endblock %}

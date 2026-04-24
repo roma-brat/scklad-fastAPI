@@ -1,0 +1,657 @@
+{% extends "base.html" %}
+
+{% block title %}Детали (ДСЕ){% endblock %}
+
+{% block content %}
+<div x-data="detailsApp()" class="h-full flex flex-col">
+    <!-- Header -->
+    <div class="bg-blue-50 border-b border-blue-100 px-4 sm:px-6 py-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h1 class="text-2xl sm:text-3xl font-bold text-blue-700">
+                <i class="fas fa-cogs mr-2"></i>Детали (ДСЕ)
+            </h1>
+            <div class="flex flex-wrap gap-2 btn-responsive-group">
+                <button @click="showAddModal = true"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700bg-blue-500 transition-colors text-sm sm:text-base">
+                    <i class="fas fa-plus mr-2"></i><span class="hidden sm:inline">Добавить деталь</span><span class="sm:hidden">Добавить</span>
+                </button>
+                <a href="/routes"
+                   class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700bg-indigo-500 transition-colors text-sm sm:text-base">
+                    <i class="fas fa-route mr-2"></i><span class="hidden sm:inline">Маршруты</span><span class="sm:hidden">Маршруты</span>
+                </a>
+                <a href="/details"
+                   class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700bg-gray-500 transition-colors text-sm sm:text-base">
+                    <i class="fas fa-sync-alt mr-2"></i><span class="hidden sm:inline">Обновить</span><span class="sm:hidden">Обновить</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters & Sort (client-side search - NO PAGE RELOAD) -->
+    <div class="bg-white border-b border-gray-200 px-4 sm:px-6 py-4">
+        <div class="flex flex-col lg:flex-row gap-3 lg:items-center">
+            <div class="flex-1">
+                <input type="search"
+                       id="search-input"
+                       placeholder="Поиск по обозначению или наименованию..."
+                       value="{{ search or '' }}"
+                       autocomplete="off"
+                       hx-boost="false"
+                       hx-disable
+                       class="w-full px-4 py-2 border border-gray-300 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500:ring-blue-400 placeholder-gray-400 text-sm sm:text-base">
+            </div>
+            <div class="flex flex-wrap gap-2 items-center">
+                <label class="text-sm text-gray-600 hidden lg:inline">Сортировка:</label>
+                <select name="sort_by"
+                        class="px-3 py-2 border border-gray-300 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
+                    <option value="designation" {% if sort_by == 'designation' %}selected{% endif %}>По обозначению</option>
+                    <option value="name" {% if sort_by == 'name' %}selected{% endif %}>По наименованию</option>
+                    <option value="date" {% if sort_by == 'date' %}selected{% endif %}>По дате</option>
+                </select>
+                <button type="button"
+                        onclick="window.location.href='/details?sort_by={{ sort_by }}&sort_order={% if sort_order == 'asc' %}desc{% else %}asc{% endif %}'"
+                        class="px-3 py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                    {% if sort_order == 'asc' %}
+                        <i class="fas fa-arrow-up"></i>
+                    {% else %}
+                        <i class="fas fa-arrow-down"></i>
+                    {% endif %}
+                </button>
+            </div>
+            <div class="flex gap-2">
+                <button type="button" onclick="resetSearch()" class="flex-1 lg:flex-none px-4 sm:px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm sm:text-base">
+                    <i class="fas fa-times mr-2"></i>Сброс
+                </button>
+            </div>
+        </div>
+        <div class="mt-2 text-sm text-gray-600">
+            Всего деталей: <span id="total-count" class="font-semibold text-blue-700">{{ total_count }}</span>
+            <span id="filtered-count" class="hidden text-sm text-gray-500">| Найдено: <span class="font-semibold text-blue-700">0</span></span>
+        </div>
+    </div>
+
+    <!-- DESKTOP TABLE VIEW (с горизонтальной прокруткой на мобильных) -->
+    <div class="flex-1 overflow-auto">
+        <div class="responsive-table-wrapper">
+            <!-- Table Header -->
+            <div class="bg-blue-700 text-white px-4 py-3 sticky top-0 z-10 min-w-[800px]">
+                <div class="grid grid-cols-11 gap-2 text-sm font-semibold">
+                    <div class="col-span-1">№</div>
+                    <div class="col-span-3">Обозначение / Наименование</div>
+                    <div class="col-span-1 text-center">Верс.</div>
+                    <div class="col-span-1 text-center">Статус</div>
+                    <div class="col-span-2 text-center">Маршрут</div>
+                    <div class="col-span-1 text-center">Создал</div>
+                    <div class="col-span-1 text-center">Дата</div>
+                    <div class="col-span-1 text-center">Действия</div>
+                </div>
+            </div>
+
+            <!-- Table Content -->
+            {% if details %}
+                {% for detail in details %}
+                <div id="detail-{{ detail.id }}"
+                     class="grid grid-cols-11 gap-2 px-4 py-3 border-b border-gray-200 hover:bg-blue-50 transition-colors {% if loop.index % 2 == 0 %}bg-gray-50{% endif %} min-w-[800px] {% if highlight_route_id and detail.route_id == highlight_route_id %}bg-yellow-100 border-l-4 border-l-yellow-500{% endif %}">
+                    <!-- № -->
+                    <div class="col-span-1 text-gray-600 text-sm flex items-center">{{ loop.index }}</div>
+                    
+                    <!-- Обозначение / Наименование -->
+                    <div class="col-span-3 flex items-center">
+                        <div>
+                            <div class="text-sm font-medium text-gray-900">{{ detail.designation }}</div>
+                            <div class="text-xs text-gray-600">{{ detail.name }}</div>
+                        </div>
+                    </div>
+
+                    <!-- Версия -->
+                    <div class="col-span-1 text-center flex items-center justify-center">
+                        <span class="text-sm text-gray-700">{{ detail.version }}</span>
+                    </div>
+
+                    <!-- Статус -->
+                    <div class="col-span-1 text-center flex items-center justify-center">
+                        {% if detail.is_actual %}
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Актуально
+                            </span>
+                        {% else %}
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                Неактуально
+                            </span>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Маршрут -->
+                    <div class="col-span-2 flex items-center overflow-hidden">
+                        {% if detail.has_route %}
+                            <div class="flex items-center gap-1 min-w-0">
+                                <i class="fas fa-check-circle text-green-600 text-xs flex-shrink-0"></i>
+                                <div class="min-w-0 flex-1">
+                                    <div class="text-sm text-gray-900 truncate">{{ detail.route_name }}</div>
+                                    {% if detail.route_material %}
+                                        <div class="text-xs text-gray-600 truncate">{{ detail.route_material }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="flex items-center gap-1">
+                                <i class="fas fa-minus-circle text-gray-400 text-xs flex-shrink-0"></i>
+                                <span class="text-sm text-gray-500">—</span>
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Создал -->
+                    <div class="col-span-1 text-center text-sm text-gray-600 flex items-center justify-center">
+                        {{ detail.creator_name or '—' }}
+                    </div>
+                    
+                    <!-- Дата -->
+                    <div class="col-span-1 text-center text-sm text-gray-600 flex items-center justify-center">
+                        {% if detail.created_at %}
+                            {% if detail.created_at is string %}
+                                {{ detail.created_at[:10] }}
+                            {% else %}
+                                {{ detail.created_at.strftime('%Y-%m-%d') }}
+                            {% endif %}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Действия (КРАЙНЯЯ ПРАВАЯ КОЛОНКА) -->
+                    <div class="col-span-1 flex items-center justify-center">
+                        <div class="flex items-center gap-1">
+                            {% if detail.has_route %}
+                                <a href="/routes?highlight_detail_id={{ detail.route_id }}#route-{{ detail.route_id }}"
+                                   class="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded transition-colors"
+                                   title="Перейти к маршруту">
+                                    <i class="fas fa-route text-sm"></i>
+                                </a>
+                            {% else %}
+                                <a href="/planner?detail={{ detail.designation }}" 
+                                   class="p-1.5 text-orange-600 hover:text-orange-800 hover:bg-orange-100 rounded transition-colors"
+                                   title="Создать маршрут">
+                                    <i class="fas fa-plus text-sm"></i>
+                                </a>
+                            {% endif %}
+                            <button @click="confirmDelete({{ detail.id }}, '{{ detail.designation }}')" 
+                                    class="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-100 rounded transition-colors"
+                                    title="Удалить">
+                                <i class="fas fa-trash text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="text-center py-12">
+                    <i class="fas fa-cogs text-6xl text-gray-300 mb-4"></i>
+                    <p class="text-gray-600 text-lg">Детали не найдены</p>
+                    {% if search %}
+                        <p class="text-gray-500 text-sm mt-2">Попробуйте изменить параметры поиска</p>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Add Detail Modal -->
+    <div x-show="showAddModal" 
+         x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto"
+         @keydown.escape.window="showAddModal = false">
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <!-- Backdrop -->
+            <div x-show="showAddModal" 
+                 x-transition:enter="ease-out duration-300"
+                 x-transition:enter-start="opacity-0"
+                 x-transition:enter-end="opacity-100"
+                 x-transition:leave="ease-in duration-200"
+                 x-transition:leave-start="opacity-100"
+                 x-transition:leave-end="opacity-0"
+                 class="fixed inset-0 bg-black bg-opacity-50"></div>
+
+            <!-- Modal -->
+            <div x-show="showAddModal"
+                 x-transition:enter="ease-out duration-300"
+                 x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave="ease-in duration-200"
+                 x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                <div class="mb-4">
+                    <h3 class="text-xl font-bold text-gray-900">Добавить деталь</h3>
+                </div>
+                <form action="/details/create" method="POST">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Обозначение *</label>
+                            <input type="text" name="designation" required
+                                   placeholder="АБВ.ХХХХХХХ.ХХХ"
+                                   class="w-full px-4 py-2 border border-gray-300 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500ring-blue-400:border-blue-400 placeholder-gray-400">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Наименование *</label>
+                            <input type="text" name="name" required
+                                   placeholder="Крышка"
+                                   class="w-full px-4 py-2 border border-gray-300 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500ring-blue-400:border-blue-400 placeholder-gray-400">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Тип</label>
+                            <select name="detail_type"
+                                    class="w-full px-4 py-2 border border-gray-300 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500:ring-blue-400">
+                                <option value="detail">Деталь</option>
+                                <option value="assembly">Сборочная единица</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Версия</label>
+                            <input type="number" name="version" value="1.0" step="0.1" min="0"
+                                   class="w-full px-4 py-2 border border-gray-300 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500ring-blue-400:border-blue-400">
+                        </div>
+                    </div>
+                    <div class="mt-6 flex gap-2 justify-end">
+                        <button type="button" @click="showAddModal = false"
+                                class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+                            Отмена
+                        </button>
+                        <button type="submit"
+                                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700bg-blue-500 transition-colors">
+                            <i class="fas fa-plus mr-2"></i>Добавить
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Detail Modal -->
+    <div x-show="showViewModal" 
+         x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto"
+         @keydown.escape.window="showViewModal = false">
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <!-- Backdrop -->
+            <div x-show="showViewModal" 
+                 x-transition:enter="ease-out duration-300"
+                 x-transition:enter-start="opacity-0"
+                 x-transition:enter-end="opacity-100"
+                 x-transition:leave="ease-in duration-200"
+                 x-transition:leave-start="opacity-100"
+                 x-transition:leave-end="opacity-0"
+                 class="fixed inset-0 bg-black bg-opacity-50"></div>
+
+            <!-- Modal -->
+            <div x-show="showViewModal"
+                 x-transition:enter="ease-out duration-300"
+                 x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave="ease-in duration-200"
+                 x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 class="relative bg-white rounded-lg shadow-xl max-w-2xl w-full p-6">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-xl font-bold text-gray-900">Информация о детали</h3>
+                    <button @click="showViewModal = false" class="text-gray-400 hover:text-gray-600text-gray-300">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                <div class="space-y-3" x-show="selectedDetail">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-sm font-medium text-gray-500">Обозначение</label>
+                            <p class="text-gray-900 font-medium" x-text="selectedDetail?.designation"></p>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-gray-500">Наименование</label>
+                            <p class="text-gray-900" x-text="selectedDetail?.name"></p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-sm font-medium text-gray-500">ID</label>
+                            <p class="text-gray-700 text-sm" x-text="selectedDetail?.detail_id"></p>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-gray-500">Lotzman ID</label>
+                            <p class="text-gray-700 text-sm" x-text="selectedDetail?.lotzman_id || '—'"></p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <label class="text-sm font-medium text-gray-500">Версия</label>
+                            <p class="text-gray-900" x-text="selectedDetail?.version"></p>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-gray-500">Тип</label>
+                            <p class="text-gray-900" x-text="selectedDetail?.detail_type || 'Деталь'"></p>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-gray-500">Статус</label>
+                            <p class="text-gray-900" x-text="selectedDetail?.is_actual ? 'Актуально' : 'Неактуально'"></p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-sm font-medium text-gray-500">Создал</label>
+                            <p class="text-gray-700" x-text="selectedDetail?.creator_name || '—'"></p>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-gray-500">Дата создания</label>
+                            <p class="text-gray-700" x-text="formatDate(selectedDetail?.created_at)"></p>
+                        </div>
+                    </div>
+                    <div class="border-t border-gray-200 pt-3 mt-3">
+                        <h4 class="font-medium text-gray-900 mb-2">Маршрут обработки</h4>
+                        <div x-show="selectedDetail?.has_route" class="space-y-2">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-500">Наличие</label>
+                                    <p class="text-green-600 font-medium">
+                                        <i class="fas fa-check-circle mr-1"></i>Есть
+                                    </p>
+                                </div>
+                                <div>
+                                    <label class="text-sm font-medium text-gray-500">Версия маршрута</label>
+                                    <p class="text-gray-900" x-text="selectedDetail?.route_version || '—'"></p>
+                                </div>
+                            </div>
+                            <div x-show="selectedDetail?.route_material">
+                                <label class="text-sm font-medium text-gray-500">Материал</label>
+                                <p class="text-gray-700" x-text="selectedDetail?.route_material"></p>
+                            </div>
+                        </div>
+                        <div x-show="!selectedDetail?.has_route">
+                            <p class="text-gray-500 text-sm">
+                                <i class="fas fa-minus-circle mr-1"></i>Маршрут не создан
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end">
+                    <button @click="showViewModal = false"
+                            class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+                        Закрыть
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div x-show="showDeleteModal" 
+         x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto"
+         @keydown.escape.window="showDeleteModal = false">
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <!-- Backdrop -->
+            <div x-show="showDeleteModal" 
+                 x-transition:enter="ease-out duration-300"
+                 x-transition:enter-start="opacity-0"
+                 x-transition:enter-end="opacity-100"
+                 x-transition:leave="ease-in duration-200"
+                 x-transition:leave-start="opacity-100"
+                 x-transition:leave-end="opacity-0"
+                 class="fixed inset-0 bg-black bg-opacity-50"></div>
+
+            <!-- Modal -->
+            <div x-show="showDeleteModal"
+                 x-transition:enter="ease-out duration-300"
+                 x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave="ease-in duration-200"
+                 x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                <div class="mb-4">
+                    <h3 class="text-xl font-bold text-gray-900">Удалить деталь?</h3>
+                    <p class="text-gray-600 mt-2" x-text="deleteMessage"></p>
+                    <p class="text-red-600 text-sm mt-2">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>
+                        Это действие нельзя отменить.
+                    </p>
+                </div>
+                <form :action="`/details/delete/${deleteId}`" method="POST">
+                    <div class="mt-6 flex gap-2 justify-end">
+                        <button type="button" @click="showDeleteModal = false"
+                                class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+                            Отмена
+                        </button>
+                        <button type="submit"
+                                class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700bg-red-500 transition-colors">
+                            <i class="fas fa-trash mr-2"></i>Удалить
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function detailsApp() {
+    return {
+        showAddModal: false,
+        showViewModal: false,
+        showDeleteModal: false,
+        selectedDetail: null,
+        deleteId: null,
+        deleteMessage: '',
+
+        viewDetail(detail) {
+            console.log('Opening detail info:', detail);
+            this.selectedDetail = detail;
+            this.showViewModal = true;
+        },
+
+        confirmDelete(id, designation) {
+            this.deleteId = id;
+            this.deleteMessage = `Вы уверены, что хотите удалить деталь ${designation}?`;
+            this.showDeleteModal = true;
+        },
+
+        formatDate(dateStr) {
+            if (!dateStr) return '—';
+            try {
+                if (typeof dateStr === 'string') {
+                    return dateStr.substring(0, 10);
+                }
+                return new Date(dateStr).toLocaleDateString('ru-RU');
+            } catch {
+                return '—';
+            }
+        }
+    }
+}
+
+// Автопрокрутка к подсвеченной строке при загрузке
+document.addEventListener('DOMContentLoaded', function() {
+    const highlighted = document.querySelector('.bg-yellow-100');
+    if (highlighted) {
+        setTimeout(() => {
+            highlighted.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);
+    }
+});
+
+// ==================== INSTANT SEARCH (no page reload) ====================
+(function() {
+    const searchInput = document.getElementById('search-input');
+    if (!searchInput) return;
+
+    // ВСЕ детали загружаются из сервера
+    const allDetails = {{ all_details_json | safe }} || [];
+    console.log('📦 Загружено деталей для поиска:', allDetails.length);
+
+    // Блокировка HTMX
+    document.body.addEventListener('htmx:configRequest', function(e) {
+        if (e.target === searchInput) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+        }
+    });
+
+    // Предотвращаем submit при Enter
+    searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+        }
+        if (e.key === 'Escape') {
+            this.value = '';
+            filterDetails();
+        }
+    });
+
+    // Фильтровать детали
+    function filterDetails() {
+        const q = searchInput.value.toLowerCase();
+        const totalCountEl = document.getElementById('total-count');
+        const filteredCountEl = document.getElementById('filtered-count');
+
+        if (!q) {
+            // Без поиска - показать все
+            document.querySelectorAll('[id^="detail-"]').forEach(el => {
+                el.style.display = '';
+            });
+            totalCountEl.textContent = allDetails.length;
+            filteredCountEl.classList.add('hidden');
+            return;
+        }
+
+        // Фильтруем все детали
+        const filtered = allDetails.filter(d => {
+            const designation = (d.designation || '').toLowerCase();
+            const name = (d.name || '').toLowerCase();
+            const detailId = (d.detail_id || '').toLowerCase();
+            return designation.includes(q) || name.includes(q) || detailId.includes(q);
+        });
+
+        // Перестраиваем список
+        rebuildDetailsList(filtered);
+
+        // Обновляем счётчик
+        totalCountEl.textContent = allDetails.length;
+        filteredCountEl.classList.remove('hidden');
+        filteredCountEl.querySelector('span').textContent = filtered.length;
+
+        console.log('🔍 Поиск:', q, '| Найдено:', filtered.length, '| Всего:', allDetails.length);
+    }
+
+    // Перестроить список деталей
+    function rebuildDetailsList(details) {
+        const container = document.querySelector('.responsive-table-wrapper');
+        if (!container) return;
+
+        // Удаляем все detail-элементы
+        container.querySelectorAll('[id^="detail-"]').forEach(el => el.remove());
+
+        // Удаляем "не найдено" если есть
+        const noResults = container.querySelector('.text-center.py-12');
+        if (noResults) noResults.remove();
+
+        if (details.length === 0) {
+            container.innerHTML += `
+                <div class="text-center py-12">
+                    <i class="fas fa-cogs text-6xl text-gray-300 mb-4"></i>
+                    <p class="text-gray-600 text-lg">Детали не найдены</p>
+                    <p class="text-gray-500 text-sm mt-2">Попробуйте изменить параметры поиска</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Добавляем отфильтрованные детали
+        details.forEach((detail, index) => {
+            const div = document.createElement('div');
+            div.id = `detail-${detail.id}`;
+            div.className = `grid grid-cols-11 gap-2 px-4 py-3 border-b border-gray-200 hover:bg-blue-50 transition-colors ${index % 2 === 0 ? 'bg-gray-50' : ''}`;
+
+            const dateStr = detail.created_at ? (detail.created_at.length > 10 ? detail.created_at.substring(0, 10) : detail.created_at) : '—';
+
+            div.innerHTML = `
+                <div class="col-span-1 text-gray-600 text-sm flex items-center">${index + 1}</div>
+                <div class="col-span-3 flex items-center">
+                    <div>
+                        <div class="text-sm font-medium text-gray-900">${detail.designation || ''}</div>
+                        <div class="text-xs text-gray-600">${detail.name || ''}</div>
+                    </div>
+                </div>
+                <div class="col-span-1 text-center flex items-center justify-center">
+                    <span class="text-sm text-gray-700">${detail.version || ''}</span>
+                </div>
+                <div class="col-span-1 text-center flex items-center justify-center">
+                    ${detail.is_actual
+                        ? '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Актуально</span>'
+                        : '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Неактуально</span>'
+                    }
+                </div>
+                <div class="col-span-2 flex items-center overflow-hidden">
+                    ${detail.has_route
+                        ? `<div class="flex items-center gap-1 min-w-0">
+                            <i class="fas fa-check-circle text-green-600 text-xs flex-shrink-0"></i>
+                            <div class="min-w-0 flex-1">
+                                <div class="text-sm text-gray-900 truncate">${detail.route_name || ''}</div>
+                                ${detail.route_material ? `<div class="text-xs text-gray-600 truncate">${detail.route_material}</div>` : ''}
+                            </div>
+                        </div>`
+                        : `<div class="flex items-center gap-1">
+                            <i class="fas fa-minus-circle text-gray-400 text-xs flex-shrink-0"></i>
+                            <span class="text-sm text-gray-500">—</span>
+                        </div>`
+                    }
+                </div>
+                <div class="col-span-1 text-center text-sm text-gray-600 flex items-center justify-center">${detail.creator_name || '—'}</div>
+                <div class="col-span-1 text-center text-sm text-gray-600 flex items-center justify-center">${dateStr}</div>
+                <div class="col-span-1 flex items-center justify-center">
+                    <div class="flex items-center gap-1">
+                        ${detail.has_route
+                            ? `<a href="/routes?highlight_route_id=${detail.route_id}#route-${detail.route_id}" class="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded transition-colors" title="Перейти к маршруту"><i class="fas fa-route text-sm"></i></a>`
+                            : `<a href="/planner?detail=${detail.designation}" class="p-1.5 text-orange-600 hover:text-orange-800 hover:bg-orange-100 rounded transition-colors" title="Создать маршрут"><i class="fas fa-plus text-sm"></i></a>`
+                        }
+                        <button onclick='confirmDeleteFromList(${detail.id}, "${detail.designation || ''}")' class="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-100 rounded transition-colors" title="Удалить"><i class="fas fa-trash text-sm"></i></button>
+                    </div>
+                </div>
+            `;
+
+            container.appendChild(div);
+        });
+    }
+
+    // Обработчик ввода
+    searchInput.addEventListener('input', function() {
+        filterDetails();
+    });
+
+    // Глобальные функции
+    window.resetSearch = function() {
+        searchInput.value = '';
+        filterDetails();
+        window.location.reload();
+    };
+
+    window.viewDetailFromList = function(detail) {
+        // Вызываем Alpine.js функцию
+        const el = document.querySelector('[x-data]');
+        if (el && el.__x) {
+            el.__x.$data.viewDetail(detail);
+        }
+    };
+
+    window.confirmDeleteFromList = function(id, designation) {
+        const el = document.querySelector('[x-data]');
+        if (el && el.__x) {
+            el.__x.$data.confirmDelete(id, designation);
+        }
+    };
+})();
+</script>
+
+<style>
+[x-cloak] { display: none !important; }
+</style>
+{% endblock %}

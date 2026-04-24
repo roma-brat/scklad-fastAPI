@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}Отчёты и экспорт{% endblock %}
+
+{% block content %}
+<div class="bg-blue-50 border-b border-blue-100 px-4 sm:px-6 py-4">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <h1 class="text-2xl sm:text-3xl font-bold text-blue-700">
+            <i class="fas fa-chart-bar mr-2"></i>Отчёты и экспорт
+        </h1>
+    </div>
+</div>
+
+<div class="p-4 sm:p-6">
+    <!-- Export Section -->
+    <div class="mb-8">
+        <h2 class="text-xl font-bold text-gray-900 mb-4">
+            <i class="fas fa-file-excel mr-2 text-green-600"></i>Экспорт данных
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- Full DB Export -->
+            <div class="bg-white rounded-lg shadow-md p-5 hover:shadow-lg transition-shadow">
+                <div class="flex items-start gap-3 mb-3">
+                    <div class="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                        <i class="fas fa-database text-green-600"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-gray-900">Полный экспорт БД</h3>
+                        <p class="text-xs text-gray-500">Все таблицы в один файл</p>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-600 mb-4">Выгрузить все таблицы базы данных (Склад, Пользователи, Оборудование, Детали, Транзакции и др.)</p>
+                <a href="/reports/export/full"
+                   class="block w-full px-4 py-2 bg-green-600 text-white text-center rounded-lg hover:bg-green-700 transition-colors">
+                    <i class="fas fa-download mr-2"></i>Скачать Excel
+                </a>
+            </div>
+
+            <!-- Transactions Export -->
+            <div class="bg-white rounded-lg shadow-md p-5 hover:shadow-lg transition-shadow">
+                <div class="flex items-start gap-3 mb-3">
+                    <div class="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                        <i class="fas fa-exchange-alt text-blue-600"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-gray-900">Экспорт операций</h3>
+                        <p class="text-xs text-gray-500">История транзакций</p>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-600 mb-4">Выгрузить все операции прихода и расхода со склада</p>
+                <a href="/reports/export/transactions"
+                   class="block w-full px-4 py-2 bg-blue-600 text-white text-center rounded-lg hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-download mr-2"></i>Скачать Excel
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Section -->
+    <div class="mb-8">
+        <h2 class="text-xl font-bold text-gray-900 mb-4">
+            <i class="fas fa-file-import mr-2 text-blue-600"></i>Импорт данных
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- Import Items (New Tools) -->
+            <div class="bg-white rounded-lg shadow-md p-5 hover:shadow-lg transition-shadow">
+                <div class="flex items-start gap-3 mb-3">
+                    <div class="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                        <i class="fas fa-tools text-green-600"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-gray-900">Загрузка инструмента</h3>
+                        <p class="text-xs text-gray-500">Новые товары на склад</p>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-600 mb-4">Загрузить новые инструменты из Excel файла с авто-маппингом колонок</p>
+                <a href="/import/excel"
+                   class="block w-full px-4 py-2 bg-green-600 text-white text-center rounded-lg hover:bg-green-700 transition-colors">
+                    <i class="fas fa-upload mr-2"></i>Загрузить
+                </a>
+            </div>
+
+            <!-- DB Compare Import -->
+            <div class="bg-white rounded-lg shadow-md p-5 hover:shadow-lg transition-shadow">
+                <div class="flex items-start gap-3 mb-3">
+                    <div class="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
+                        <i class="fas fa-database text-orange-600"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-gray-900">Обновление БД из Excel</h3>
+                        <p class="text-xs text-gray-500">Сравнение с БД</p>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-600 mb-4">Сравнить Excel с базой данных и выборочно обновить записи</p>
+                <a href="/import/db-compare"
+                   class="block w-full px-4 py-2 bg-orange-600 text-white text-center rounded-lg hover:bg-orange-700 transition-colors">
+                    <i class="fas fa-sync-alt mr-2"></i>Сравнить и обновить
+                </a>
+            </div>
+
+            <!-- Import Operations -->
+            <div class="bg-white rounded-lg shadow-md p-5 hover:shadow-lg transition-shadow">
+                <div class="flex items-start gap-3 mb-3">
+                    <div class="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                        <i class="fas fa-exchange-alt text-blue-600"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-gray-900">Импорт операций</h3>
+                        <p class="text-xs text-gray-500">Приход/Расход</p>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-600 mb-4">Загрузить операции прихода или расхода из Excel</p>
+                <a href="/transactions/import"
+                   class="block w-full px-4 py-2 bg-blue-600 text-white text-center rounded-lg hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-arrow-right mr-2"></i>Перейти
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Section -->
+    <div class="bg-blue-50 rounded-lg p-5 border border-blue-100">
+        <h3 class="font-bold text-blue-900 mb-3">
+            <i class="fas fa-info-circle mr-2"></i>Информация
+        </h3>
+        <ul class="space-y-2 text-sm text-blue-800">
+            <li>
+                <i class="fas fa-check text-green-600 mr-2"></i>
+                <strong>Полный экспорт</strong> — создаёт Excel файл со всеми таблицами БД (26 таблиц)
+            </li>
+            <li>
+                <i class="fas fa-check text-green-600 mr-2"></i>
+                <strong>Экспорт операций</strong> — выгружает историю прихода/расхода товаров (на странице <a href="/transactions" class="underline">Операции</a>)
+            </li>
+            <li>
+                <i class="fas fa-check text-green-600 mr-2"></i>
+                <strong>Загрузка инструмента</strong> — добавление новых товаров на склад из Excel
+            </li>
+            <li>
+                <i class="fas fa-check text-green-600 mr-2"></i>
+                <strong>Обновление БД</strong> — сравнение Excel с базой и выборочное обновление записей
+            </li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

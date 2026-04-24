@@ -1,0 +1,689 @@
+{% extends "base.html" %}
+
+{% block title %}Склад инструментов{% endblock %}
+
+{% block content %}
+<div class="bg-white border-b border-gray-200 px-6 py-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">
+                <i class="fas fa-boxes mr-2 text-blue-600"></i>Склад инструментов
+            </h1>
+            <p class="text-gray-600 mt-1">Всего: {{ total_items }} товаров</p>
+        </div>
+        <div class="flex space-x-2">
+            <button onclick="toggleView('table')" id="btn-table"
+                    class="px-3 py-2 rounded-lg text-sm font-medium {% if view_mode == 'table' %}bg-blue-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200:{% endif %}">
+                <i class="fas fa-table mr-1"></i>Таблица
+            </button>
+            <button onclick="toggleView('grouped')" id="btn-grouped"
+                    class="px-3 py-2 rounded-lg text-sm font-medium {% if view_mode == 'grouped' %}bg-blue-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200:{% endif %}">
+                <i class="fas fa-layer-group mr-1"></i>Группы
+            </button>
+            <button onclick="openModal('create')"
+                    class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                <i class="fas fa-plus mr-2"></i>Добавить
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Error message from session -->
+{% if request.session.get('item_create_error') %}
+<div class="mx-6 mt-4">
+    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg flex items-center justify-between">
+        <div class="flex items-center">
+            <i class="fas fa-exclamation-circle mr-2"></i>
+            <span>{{ request.session.get('item_create_error') }}</span>
+        </div>
+        <button onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+</div>
+{% endif %}
+
+<div class="p-4 sm:p-6">
+    <!-- Filters (HTMX disabled - client-side filtering) -->
+    <div id="filters-container" data-no-ajax>
+        <div class="flex flex-wrap gap-2 sm:gap-4 items-end">
+            <div class="flex-1 min-w-[160px]">
+                <label class="block text-xs text-gray-500 mb-1">Поиск</label>
+                <input type="search"
+                       placeholder="По названию, ID, категории..."
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                       id="search-input"
+                       value="{{ search or '' }}"
+                       autocomplete="off"
+                       hx-boost="false"
+                       hx-disable>
+            </div>
+            <div class="w-full sm:w-44">
+                <label class="block text-xs text-gray-500 mb-1">Категория</label>
+                <select id="category-select"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        hx-boost="false"
+                        hx-disable>
+                    <option value="">Все категории</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}" {% if cat == current_category %}selected{% endif %}>{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="button" onclick="resetFilters()" class="px-3 sm:px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm font-medium whitespace-nowrap" hx-boost="false" hx-disable>
+                <i class="fas fa-times mr-1"></i><span class="hidden sm:inline">Сброс</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- TABLE VIEW -->
+    {% if view_mode == 'table' %}
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+        <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-2 sm:px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase">№</th>
+                    <th class="px-2 sm:px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Фото</th>
+                    <th class="px-2 sm:px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ID</th>
+                    <th class="px-2 sm:px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Название</th>
+                    <th class="px-2 sm:px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">Категория</th>
+                    <th class="px-2 sm:px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Кол-во</th>
+                    <th class="px-2 sm:px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Мин.</th>
+                    <th class="px-2 sm:px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase hidden xl:table-cell">Статус</th>
+                    <th class="px-2 sm:px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Место</th>
+                    <th class="px-2 sm:px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Действия</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-100">
+                {% for item in items %}
+                <tr class="hover:bg-blue-50 transition-colors">
+                    <td class="px-2 sm:px-3 py-3 text-gray-500 text-center">{{ loop.index + (page - 1) * page_size }}</td>
+                    <td class="px-2 sm:px-3 py-3">
+                        {% if item.image_url %}
+                        <img src="{{ item.image_url }}" class="w-8 h-8 sm:w-10 sm:h-10 rounded object-cover" alt="">
+                        {% elif has_image(item.item_id) %}
+                        <img src="/item_images/{{ item.item_id }}.jpg" class="w-8 h-8 sm:w-10 sm:h-10 rounded object-cover" alt="">
+                        {% else %}
+                        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded bg-gray-200 flex items-center justify-center"><i class="fas fa-image text-gray-400 text-xs"></i></div>
+                        {% endif %}
+                    </td>
+                    <td class="px-2 sm:px-3 py-3 font-mono text-gray-600 hidden sm:table-cell">{{ item.item_id }}</td>
+                    <td class="px-2 sm:px-3 py-3 font-medium text-gray-900 max-w-[200px] truncate">{{ item.name }}</td>
+                    <td class="px-2 sm:px-3 py-3 hidden lg:table-cell">
+                        {% if item.category %}<span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">{{ item.category }}</span>{% else %}<span class="text-gray-400">—</span>{% endif %}
+                    </td>
+                    <td class="px-2 sm:px-3 py-3 text-center">
+                        <span class="text-base sm:text-lg font-bold {% if item.quantity <= item.min_stock %}text-red-600{% else %}text-green-600{% endif %}">{{ item.quantity }}</span>
+                    </td>
+                    <td class="px-2 sm:px-3 py-3 text-center text-gray-600 hidden md:table-cell">{{ item.min_stock }}</td>
+                    <td class="px-2 sm:px-3 py-3 hidden xl:table-cell">
+                        {% if item.quantity <= item.min_stock %}
+                        <span class="px-2 py-1 bg-red-100 text-red-800 rounded text-xs">🔴</span>
+                        {% else %}
+                        <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">🟢</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-2 sm:px-3 py-3 text-gray-600 hidden md:table-cell max-w-[120px] truncate">{{ item.location or '—' }}</td>
+                    <td class="px-2 sm:px-3 py-3 text-center">
+                        <div class="flex items-center justify-center space-x-0.5 sm:space-x-1">
+                            <button type="button" onclick='openEditModal({{ item | tojson | safe }})' class="p-1.5 bg-blue-100 text-blue-600 rounded hover:bg-blue-200bg-blue-900/40" title="Редактировать"><i class="fas fa-edit text-xs sm:text-sm"></i></button>
+                            <button type="button" onclick='openIncomeModal("{{ item.item_id }}","{{ item.name }}",{{ item.quantity }})' class="p-1.5 bg-green-100 text-green-600 rounded hover:bg-green-200bg-green-900/40" title="Приход"><i class="fas fa-plus text-xs sm:text-sm"></i></button>
+                            <button type="button" onclick='openExpenseModal("{{ item.item_id }}","{{ item.name }}",{{ item.quantity }})' class="p-1.5 bg-red-100 text-red-600 rounded hover:bg-red-200bg-red-900/40" title="Расход"><i class="fas fa-minus text-xs sm:text-sm"></i></button>
+                            {% if item.shop_url %}<a href="{{ item.shop_url }}" target="_blank" class="p-1.5 bg-orange-100 text-orange-600 rounded hover:bg-orange-200bg-orange-900/40" title="Магазин"><i class="fas fa-shopping-cart text-xs sm:text-sm"></i></a>{% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- GROUPED VIEW -->
+    {% if view_mode == 'grouped' %}
+    {% set ns = namespace(prev_cat=None, group_idx=0) %}
+    {% for item in items %}
+        {% if item.category != ns.prev_cat %}
+            {% if not loop.first %}
+                </tbody></table></div>
+            {% endif %}
+            {% set ns.group_idx = ns.group_idx + 1 %}
+            {% set ns.prev_cat = item.category %}
+            
+            <!-- Category Group -->
+            <div class="mb-4">
+                <details open class="group border border-gray-200 rounded-lg overflow-hidden">
+                    <summary class="flex items-center justify-between px-4 py-3 bg-blue-50 cursor-pointer hover:bg-blue-100bg-blue-900/40 transition select-none">
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-folder text-blue-700 text-lg"></i>
+                            <span class="font-bold text-gray-900 text-base">{{ item.category or 'Без категории' }}</span>
+                            <span class="text-sm text-gray-500" id="cat-count-{{ ns.group_idx }}">(0)</span>
+                        </div>
+                        <i class="fas fa-chevron-down text-gray-500 transition-transform group-open:rotate-180"></i>
+                    </summary>
+                    <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-2 py-2 text-center text-xs font-semibold text-gray-500 uppercase">№</th>
+                                <th class="px-2 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Фото</th>
+                                <th class="px-2 py-2 text-left text-xs font-semibold text-gray-500 uppercase hidden sm:table-cell">ID</th>
+                                <th class="px-2 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Название</th>
+                                <th class="px-2 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Кол-во</th>
+                                <th class="px-2 py-2 text-center text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Мин.</th>
+                                <th class="px-2 py-2 text-left text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Место</th>
+                                <th class="px-2 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-100">
+        {% endif %}
+        
+                        <tr class="hover:bg-blue-50 transition-colors">
+                            <td class="px-2 py-2 text-gray-500 text-center">{{ loop.index }}</td>
+                            <td class="px-2 py-2">
+                                {% if item.image_url %}
+                                <img src="{{ item.image_url }}" class="w-8 h-8 rounded object-cover" alt="">
+                                {% elif has_image(item.item_id) %}
+                                <img src="/item_images/{{ item.item_id }}.jpg" class="w-8 h-8 rounded object-cover" alt="">
+                                {% else %}
+                                <div class="w-8 h-8 rounded bg-gray-200 flex items-center justify-center"><i class="fas fa-image text-gray-400 text-xs"></i></div>
+                                {% endif %}
+                            </td>
+                            <td class="px-2 py-2 font-mono text-gray-600 hidden sm:table-cell">{{ item.item_id }}</td>
+                            <td class="px-2 py-2 font-medium text-gray-900 max-w-[200px] truncate">{{ item.name }}</td>
+                            <td class="px-2 py-2 text-center">
+                                <span class="text-lg font-bold {% if item.quantity <= item.min_stock %}text-red-600{% else %}text-green-600{% endif %}">{{ item.quantity }}</span>
+                            </td>
+                            <td class="px-2 py-2 text-center text-gray-600 hidden md:table-cell">{{ item.min_stock }}</td>
+                            <td class="px-2 py-2 text-gray-600 hidden md:table-cell max-w-[120px] truncate">{{ item.location or '—' }}</td>
+                            <td class="px-2 py-2 text-center">
+                                <div class="flex items-center justify-center space-x-0.5">
+                                    <button type="button" onclick='openEditModal({{ item | tojson | safe }})' class="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200bg-blue-900/40" title="Ред."><i class="fas fa-edit text-xs"></i></button>
+                                    <button type="button" onclick='openIncomeModal("{{ item.item_id }}","{{ item.name }}",{{ item.quantity }})' class="p-1 bg-green-100 text-green-600 rounded hover:bg-green-200bg-green-900/40" title="Приход"><i class="fas fa-plus text-xs"></i></button>
+                                    <button type="button" onclick='openExpenseModal("{{ item.item_id }}","{{ item.name }}",{{ item.quantity }})' class="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200bg-red-900/40" title="Расход"><i class="fas fa-minus text-xs"></i></button>
+                                    {% if item.shop_url %}<a href="{{ item.shop_url }}" target="_blank" class="p-1 bg-orange-100 text-orange-600 rounded hover:bg-orange-200bg-orange-900/40" title="Магазин"><i class="fas fa-shopping-cart text-xs"></i></a>{% endif %}
+                                </div>
+                            </td>
+                        </tr>
+    {% endfor %}
+    {% if items %}
+                        </tbody>
+                    </table>
+                    </div>
+                </details>
+            </div>
+    {% endif %}
+    {% endif %}
+
+    {% if not items %}
+    <div class="text-center py-12 bg-white rounded-lg shadow">
+        <i class="fas fa-box-open text-6xl text-gray-300 mb-4"></i>
+        <p class="text-gray-600">Товары не найдены</p>
+    </div>
+    {% endif %}
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="mt-6 flex justify-center">
+        <nav class="flex space-x-2">
+            {% if page > 1 %}<a href="?page={{ page-1 }}&search={{ search or '' }}&category={{ current_category or '' }}&view={{ view_mode }}" class="px-3 py-2 rounded bg-white text-gray-700 hover:bg-blue-50 border border-gray-200"><i class="fas fa-chevron-left"></i></a>{% endif %}
+            {% for p in range(1, total_pages + 1) %}
+            {% if p == page %}<span class="px-3 py-2 rounded bg-blue-600 text-white">{{ p }}</span>
+            {% elif p <= 3 or p > total_pages-3 or (p >= page-1 and p <= page+1) %}<a href="?page={{ p }}&search={{ search or '' }}&category={{ current_category or '' }}&view={{ view_mode }}" class="px-3 py-2 rounded bg-white text-gray-700 hover:bg-blue-50 border border-gray-200">{{ p }}</a>
+            {% elif p == 4 or p == total_pages-3 %}<span class="px-2 text-gray-500">...</span>{% endif %}
+            {% endfor %}
+            {% if page < total_pages %}<a href="?page={{ page+1 }}&search={{ search or '' }}&category={{ current_category or '' }}&view={{ view_mode }}" class="px-3 py-2 rounded bg-white text-gray-700 hover:bg-blue-50 border border-gray-200"><i class="fas fa-chevron-right"></i></a>{% endif %}
+        </nav>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ===== MODALS ===== -->
+
+<!-- Edit Modal -->
+<div id="edit-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow xl:max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto p-6">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold"><i class="fas fa-edit mr-2 text-blue-600"></i>Редактировать товар</h3>
+            <button onclick="closeModal('edit-modal')" class="text-gray-400 hover:text-gray-600text-gray-400"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        <form method="POST" action="/items/action" class="space-y-4">
+            <input type="hidden" id="edit-original-id" name="original_id">
+            <input type="hidden" name="action" value="edit">
+            <div class="grid grid-cols-2 gap-4">
+                <div><label class="block text-sm font-medium text-gray-700 mb-1">ID товара</label><input type="text" id="edit-item-id" name="item_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50" readonly></div>
+                <div><label class="block text-sm font-medium text-gray-700 mb-1">Название *</label><input type="text" id="edit-name" name="name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+            </div>
+            <div class="grid grid-cols-3 gap-4">
+                <div><label class="block text-sm font-medium text-gray-700 mb-1">Категория</label><input type="text" id="edit-category" name="category" class="w-full px-3 py-2 border border-gray-300 rounded-lg" list="category-list"><datalist id="category-list">{% for cat in categories %}<option value="{{ cat }}">{% endfor %}</datalist></div>
+                <div><label class="block text-sm font-medium text-gray-700 mb-1">Количество</label><input type="number" id="edit-quantity" name="quantity" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                <div><label class="block text-sm font-medium text-gray-700 mb-1">Мин. остаток</label><input type="number" id="edit-min-stock" name="min_stock" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div><label class="block text-sm font-medium text-gray-700 mb-1">Место</label><input type="text" id="edit-location" name="location" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                <div><label class="block text-sm font-medium text-gray-700 mb-1">Ссылка на магазин</label><input type="url" id="edit-shop-url" name="shop_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="https://..."></div>
+            </div>
+            <div><label class="block text-sm font-medium text-gray-700 mb-1">URL изображения</label><input type="url" id="edit-image-url" name="image_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="https://..."></div>
+            <!-- Specs -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <label class="block text-sm font-medium text-gray-700">Характеристики</label>
+                    <button type="button" onclick="addSpecRow()" class="text-sm text-blue-600 hover:text-blue-800text-blue-300"><i class="fas fa-plus mr-1"></i>Добавить</button>
+                </div>
+                <div id="specs-container" class="space-y-2"></div>
+            </div>
+            <div class="flex space-x-3 pt-2">
+                <button type="submit" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Сохранить</button>
+                <button type="button" onclick="closeModal('edit-modal')" class="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 text-gray-700">Отмена</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Income Modal -->
+<div id="income-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow max-w-md w-full mx-4 p-6">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-green-700"><i class="fas fa-plus-circle mr-2"></i>Приход</h3>
+            <button onclick="closeModal('income-modal')" class="text-gray-400 hover:text-gray-600text-gray-400"><i class="fas fa-times"></i></button>
+        </div>
+        <form method="POST" action="/items/action" class="space-y-4">
+            <input type="hidden" name="action" value="income">
+            <input type="hidden" id="income-item-id" name="item_id">
+            <p class="text-sm"><strong id="income-item-name"></strong> <span class="text-gray-500">(сейчас: <span id="income-current-qty"></span>)</span></p>
+            <div><label class="block text-sm font-medium text-gray-700 mb-1">Количество</label><input type="number" name="quantity" required min="1" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"></div>
+            <div><label class="block text-sm font-medium text-gray-700 mb-1">Примечание</label><input type="text" name="detail" class="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Поставщик, накладная..."></div>
+            <div class="flex space-x-3">
+                <button type="submit" class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Провести</button>
+                <button type="button" onclick="closeModal('income-modal')" class="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 text-gray-700">Отмена</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Expense Modal -->
+<div id="expense-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow max-w-md w-full mx-4 p-6">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-red-700"><i class="fas fa-minus-circle mr-2"></i>Расход</h3>
+            <button onclick="closeModal('expense-modal')" class="text-gray-400 hover:text-gray-600text-gray-400"><i class="fas fa-times"></i></button>
+        </div>
+        <form method="POST" action="/items/action" class="space-y-4">
+            <input type="hidden" name="action" value="expense">
+            <input type="hidden" id="expense-item-id" name="item_id">
+            <p class="text-sm"><strong id="expense-item-name"></strong> <span class="text-gray-500">(доступно: <span id="expense-current-qty"></span>)</span></p>
+            <div><label class="block text-sm font-medium text-gray-700 mb-1">Количество</label><input type="number" id="expense-max-qty" name="quantity" required min="1" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"></div>
+            <div><label class="block text-sm font-medium text-gray-700 mb-1">Причина</label><input type="text" name="reason" class="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Выдача, брак..."></div>
+            <div class="flex space-x-3">
+                <button type="submit" class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Провести</button>
+                <button type="button" onclick="closeModal('expense-modal')" class="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 text-gray-700">Отмена</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Create Modal -->
+<div id="create-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto p-6">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-green-700"><i class="fas fa-plus-circle mr-2"></i>Новый товар</h3>
+            <button onclick="closeModal('create-modal')" class="text-gray-400 hover:text-gray-600text-gray-400"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        <form method="POST" action="/items/action" class="space-y-4" onsubmit="return validateCreateForm()">
+            <input type="hidden" name="action" value="create">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">ID товара *</label>
+                    <input type="text" id="create-item-id" name="item_id" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                           placeholder="TOOL-001"
+                           onblur="checkItemId(this.value)"
+                           autocomplete="off">
+                    <p id="item-id-status" class="text-xs mt-1 hidden"></p>
+                </div>
+                <div><label class="block text-sm font-medium text-gray-700 mb-1">Название *</label><input type="text" name="name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Молоток"></div>
+            </div>
+            <div class="grid grid-cols-3 gap-4">
+                <div><label class="block text-sm font-medium text-gray-700 mb-1">Категория</label><input type="text" name="category" class="w-full px-3 py-2 border border-gray-300 rounded-lg" list="category-list2"><datalist id="category-list2">{% for cat in categories %}<option value="{{ cat }}">{% endfor %}</datalist></div>
+                <div><label class="block text-sm font-medium text-gray-700 mb-1">Количество</label><input type="number" name="quantity" value="0" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                <div><label class="block text-sm font-medium text-gray-700 mb-1">Мин. остаток</label><input type="number" name="min_stock" value="1" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div><label class="block text-sm font-medium text-gray-700 mb-1">Место</label><input type="text" name="location" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Стеллаж A"></div>
+                <div><label class="block text-sm font-medium text-gray-700 mb-1">Ссылка на магазин</label><input type="url" name="shop_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="https://..."></div>
+            </div>
+            <div><label class="block text-sm font-medium text-gray-700 mb-1">URL изображения</label><input type="url" name="image_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="https://..."></div>
+            <div class="flex space-x-3 pt-2">
+                <button type="submit" class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Создать</button>
+                <button type="button" onclick="closeCreateModalWithClear()" class="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 text-gray-700">Отмена</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Count items per category group
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('details.group').forEach(group => {
+        const tbody = group.querySelector('tbody');
+        if (tbody) {
+            const count = tbody.querySelectorAll('tr').length;
+            const countEl = group.querySelector('[id^="cat-count-"]');
+            if (countEl) countEl.textContent = `(${count})`;
+        }
+    });
+});
+
+// View mode toggle
+function toggleView(mode) {
+    const url = new URL(window.location);
+    url.searchParams.set('view', mode);
+    url.searchParams.set('page', '1');
+    window.location = url.toString();
+}
+
+// Modal helpers
+function openModal(id) { document.getElementById(id + '-modal').classList.remove('hidden'); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+// Check item ID uniqueness
+let checkIdTimeout = null;
+function checkItemId(itemId) {
+    const status = document.getElementById('item-id-status');
+    const input = document.getElementById('create-item-id');
+
+    if (!itemId || itemId.trim() === '') {
+        status.classList.add('hidden');
+        input.classList.remove('border-red-500', 'border-green-500');
+        return;
+    }
+
+    // Debounce
+    if (checkIdTimeout) clearTimeout(checkIdTimeout);
+    checkIdTimeout = setTimeout(async () => {
+        try {
+            const response = await fetch(`/items/check-id?item_id=${encodeURIComponent(itemId)}`);
+            const data = await response.json();
+
+            if (data.exists) {
+                status.textContent = `❌ ID "${itemId}" уже существует: ${data.item_name || 'неизвестно'}`;
+                status.className = 'text-xs mt-1 text-red-600';
+                status.classList.remove('hidden');
+                input.classList.remove('border-green-500');
+                input.classList.add('border-red-500');
+            } else {
+                status.textContent = '✅ ID свободен';
+                status.className = 'text-xs mt-1 text-green-600';
+                status.classList.remove('hidden');
+                input.classList.remove('border-red-500');
+                input.classList.add('border-green-500');
+            }
+        } catch (e) {
+            console.error('Check ID error:', e);
+        }
+    }, 300);
+}
+
+// Validate create form before submission
+function validateCreateForm() {
+    const input = document.getElementById('create-item-id');
+    const status = document.getElementById('item-id-status');
+
+    if (!input || !input.value.trim()) {
+        return true; // Let required field handle empty
+    }
+
+    // If we have a visible status showing the ID exists, prevent submission
+    if (status && !status.classList.contains('hidden') && status.textContent.includes('уже существует')) {
+        alert('Исправьте ID товара - такой ID уже существует');
+        input.focus();
+        return false;
+    }
+
+    return true;
+}
+
+// Clear error message when closing create modal
+function closeCreateModalWithClear() {
+    const status = document.getElementById('item-id-status');
+    const input = document.getElementById('create-item-id');
+    if (status) {
+        status.classList.add('hidden');
+        status.textContent = '';
+    }
+    if (input) {
+        input.classList.remove('border-red-500', 'border-green-500');
+        input.value = '';
+    }
+    closeModal('create-modal');
+}
+
+function openEditModal(item) {
+    document.getElementById('edit-original-id').value = item.item_id;
+    document.getElementById('edit-item-id').value = item.item_id;
+    document.getElementById('edit-name').value = item.name || '';
+    document.getElementById('edit-category').value = item.category || '';
+    document.getElementById('edit-quantity').value = item.quantity || 0;
+    document.getElementById('edit-min-stock').value = item.min_stock || 0;
+    document.getElementById('edit-location').value = item.location || '';
+    document.getElementById('edit-shop-url').value = item.shop_url || '';
+    document.getElementById('edit-image-url').value = item.image_url || '';
+    // Specs
+    const container = document.getElementById('specs-container');
+    container.innerHTML = '';
+    if (item.specifications && typeof item.specifications === 'string') {
+        try {
+            const specs = JSON.parse(item.specifications);
+            for (const [k, v] of Object.entries(specs)) addSpecRow(k, v);
+        } catch(e) {}
+    }
+    if (container.children.length === 0) addSpecRow();
+    openModal('edit');
+}
+
+function openIncomeModal(itemId, name, qty) {
+    document.getElementById('income-item-id').value = itemId;
+    document.getElementById('income-item-name').textContent = name;
+    document.getElementById('income-current-qty').textContent = qty;
+    openModal('income');
+}
+
+function openExpenseModal(itemId, name, qty) {
+    document.getElementById('expense-item-id').value = itemId;
+    document.getElementById('expense-item-name').textContent = name;
+    document.getElementById('expense-current-qty').textContent = qty;
+    document.getElementById('expense-max-qty').value = qty;
+    document.getElementById('expense-max-qty').max = qty;
+    openModal('expense');
+}
+
+let specCounter = 0;
+function addSpecRow(key='', val='') {
+    specCounter++;
+    const row = document.createElement('div');
+    row.className = 'flex gap-2';
+    row.innerHTML = `<input type="text" name="spec_key_${specCounter}" value="${key}" placeholder="Параметр" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm">
+        <input type="text" name="spec_val_${specCounter}" value="${val}" placeholder="Значение" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm">
+        <button type="button" onclick="this.parentElement.remove()" class="px-2 py-2 text-red-600 hover:bg-red-50 rounded-lg"><i class="fas fa-trash"></i></button>`;
+    document.getElementById('specs-container').appendChild(row);
+}
+
+// ==================== INSTANT SEARCH (no page reload) ====================
+(function() {
+    const searchInput = document.getElementById('search-input');
+    const categorySelect = document.getElementById('category-select');
+    if (!searchInput || !categorySelect) return;
+
+    // ВСЕ товары загружаются напрямую из сервера
+    const allItems = {{ all_items_json | safe }} || [];
+    console.log('📦 Загружено товаров для поиска:', allItems.length);
+
+    // Глобальная блокировка любых HTMX запросов от поиска
+    document.body.addEventListener('htmx:configRequest', function(e) {
+        if (e.target === searchInput || e.target === categorySelect) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+        }
+    });
+
+    // Предотвращаем submit формы при Enter
+    searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+        }
+        if (e.key === 'Escape') {
+            this.value = '';
+            categorySelect.value = '';
+            filterItems();
+        }
+    });
+
+    // Фильтровать строки таблицы
+    function filterItems() {
+        const q = searchInput.value.toLowerCase();
+        const cat = categorySelect.value;
+        let visibleCount = 0;
+
+        // Если есть поисковый запрос - загружаем все товары, а не только текущую страницу
+        if (q && allItems.length > 0) {
+            // Фильтруем все товары
+            const filteredItems = allItems.filter(item => {
+                const name = (item.name || '').toLowerCase();
+                const itemId = (item.item_id || '').toLowerCase();
+                const category = (item.category || '').toLowerCase();
+                const location = (item.location || '').toLowerCase();
+                const specs = (item.specifications || '').toLowerCase();
+
+                const matchesSearch = name.includes(q) || itemId.includes(q) || category.includes(q) || location.includes(q) || specs.includes(q);
+                const matchesCategory = !cat || category.includes(cat.toLowerCase());
+
+                return matchesSearch && matchesCategory;
+            });
+
+            // Перестраиваем таблицу с отфильтрованными товарами
+            rebuildTable(filteredItems);
+            visibleCount = filteredItems.length;
+        } else {
+            // Без поиска - показываем текущую страницу
+            const allRows = document.querySelectorAll('tbody tr');
+            allRows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                const rowCat = row.querySelector('[class*="bg-blue-100"]')?.textContent || '';
+
+                const matchesSearch = !q || text.includes(q);
+                const matchesCategory = !cat || rowCat.includes(cat);
+
+                if (matchesSearch && matchesCategory) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            // GROUPED VIEW - скрываем пустые группы
+            const groups = document.querySelectorAll('.mb-4');
+            groups.forEach(group => {
+                const visibleRows = group.querySelectorAll('tbody tr:not([style*="display: none"])');
+                if (visibleRows.length === 0 && (q || cat)) {
+                    group.style.display = 'none';
+                } else {
+                    group.style.display = '';
+                }
+            });
+        }
+
+        // Обновить счётчик
+        const counter = document.querySelector('.text-gray-600.mt-1');
+        if (counter) {
+            if (q || cat) {
+                counter.textContent = `Найдено: ${visibleCount}`;
+            } else {
+                counter.textContent = 'Всего: {{ total_items }} товаров';
+            }
+        }
+
+        console.log('🔍 Поиск:', q, '| Найдено:', visibleCount, '| Всего в базе:', allItems.length);
+    }
+
+    // Перестроить таблицу с новыми данными
+    function rebuildTable(items) {
+        const viewMode = document.querySelector('[id$="-modal"], #btn-table, #btn-grouped');
+        const isGrouped = document.getElementById('btn-grouped')?.classList.contains('bg-blue-600');
+
+        if (!isGrouped) {
+            // TABLE VIEW - перестраиваем tbody
+            const tbody = document.querySelector('tbody');
+            if (!tbody) return;
+
+            tbody.innerHTML = '';
+
+            items.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-blue-50 transition-colors';
+
+                const qtyClass = item.quantity <= item.min_stock ? 'text-red-600' : 'text-green-600';
+                const statusBadge = item.quantity <= item.min_stock
+                    ? '<span class="px-2 py-1 bg-red-100 text-red-800 rounded text-xs">🔴</span>'
+                    : '<span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">🟢</span>';
+
+                const categoryHtml = item.category
+                    ? `<span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">${item.category}</span>`
+                    : '<span class="text-gray-400">—</span>';
+
+                const imageUrl = item.image_url || (item._has_image ? `/item_images/${item.item_id}.jpg` : null);
+                const imageHtml = imageUrl
+                    ? `<img src="${imageUrl}" class="w-8 h-8 sm:w-10 sm:h-10 rounded object-cover" alt="">`
+                    : '<div class="w-8 h-8 sm:w-10 sm:h-10 rounded bg-gray-200 flex items-center justify-center"><i class="fas fa-image text-gray-400 text-xs"></i></div>';
+
+                tr.innerHTML = `
+                    <td class="px-2 sm:px-3 py-3 text-gray-500 text-center">${index + 1}</td>
+                    <td class="px-2 sm:px-3 py-3">${imageHtml}</td>
+                    <td class="px-2 sm:px-3 py-3 font-mono text-gray-600 hidden sm:table-cell">${item.item_id}</td>
+                    <td class="px-2 sm:px-3 py-3 font-medium text-gray-900 max-w-[200px] truncate">${item.name}</td>
+                    <td class="px-2 sm:px-3 py-3 hidden lg:table-cell">${categoryHtml}</td>
+                    <td class="px-2 sm:px-3 py-3 text-center"><span class="text-base sm:text-lg font-bold ${qtyClass}">${item.quantity}</span></td>
+                    <td class="px-2 sm:px-3 py-3 text-center text-gray-600 hidden md:table-cell">${item.min_stock}</td>
+                    <td class="px-2 sm:px-3 py-3 hidden xl:table-cell">${statusBadge}</td>
+                    <td class="px-2 sm:px-3 py-3 text-gray-600 hidden md:table-cell max-w-[120px] truncate">${item.location || '—'}</td>
+                    <td class="px-2 sm:px-3 py-3 text-center">
+                        <div class="flex items-center justify-center space-x-0.5 sm:space-x-1">
+                            <button type="button" onclick='openEditModal(${JSON.stringify(item)})' class="p-1.5 bg-blue-100 text-blue-600 rounded hover:bg-blue-200" title="Редактировать"><i class="fas fa-edit text-xs sm:text-sm"></i></button>
+                            <button type="button" onclick='openIncomeModal("${item.item_id}","${item.name}",${item.quantity})' class="p-1.5 bg-green-100 text-green-600 rounded hover:bg-green-200" title="Приход"><i class="fas fa-plus text-xs sm:text-sm"></i></button>
+                            <button type="button" onclick='openExpenseModal("${item.item_id}","${item.name}",${item.quantity})' class="p-1.5 bg-red-100 text-red-600 rounded hover:bg-red-200" title="Расход"><i class="fas fa-minus text-xs sm:text-sm"></i></button>
+                            ${item.shop_url ? `<a href="${item.shop_url}" target="_blank" class="p-1.5 bg-orange-100 text-orange-600 rounded hover:bg-orange-200" title="Магазин"><i class="fas fa-shopping-cart text-xs sm:text-sm"></i></a>` : ''}
+                        </div>
+                    </td>
+                `;
+
+                tbody.appendChild(tr);
+            });
+        }
+    }
+
+    // Обработчик ввода — мгновенный поиск
+    searchInput.addEventListener('input', function() {
+        filterItems();
+    });
+
+    // Обработчик категории
+    categorySelect.addEventListener('change', filterItems);
+
+    // Функция сброса (глобальная)
+    window.resetFilters = function() {
+        searchInput.value = '';
+        categorySelect.value = '';
+        filterItems();
+        // Восстановить оригинальную таблицу если была перестроена
+        if (allItems.length > 0) {
+            window.location.reload();
+        }
+    };
+})();
+</script>
+{% endblock %}

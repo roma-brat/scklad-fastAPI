@@ -1,0 +1,1538 @@
+{% extends "base.html" %}
+
+{% block title %}Календарь производства{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Non-critical styles (overridden by Tailwind) */
+.operation-chip {
+    font-size: 10px !important;
+    padding: 1px 3px !important;
+    border-radius: 3px !important;
+    margin-bottom: 1px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    cursor: pointer !important;
+    transition: transform 0.1s !important;
+    border: 1.5px solid !important;
+}
+
+.operation-chip:hover {
+    transform: scale(1.05);
+    z-index: 10;
+    position: relative;
+}
+
+.operation-chip.planned {
+    background: #fef3c7 !important;
+    color: #92400e !important;
+    border-color: #f59e0b !important;
+}
+
+.operation-chip.in_progress {
+    background: #dbeafe !important;
+    color: #1e40af !important;
+    border-color: #3b82f6 !important;
+}
+
+.operation-chip.completed {
+    background: #d1fae5 !important;
+    color: #065f46 !important;
+    border-color: #10b981 !important;
+}
+
+.operation-chip.delayed {
+    background: #fee2e2 !important;
+    color: #991b1b !important;
+    border-color: #ef4444 !important;
+}
+
+.operation-chip.urgent {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.75; }
+}
+
+.filter-panel {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.filter-group {
+    margin-bottom: 8px;
+}
+
+.filter-group-header {
+    font-weight: 600;
+    font-size: 12px;
+    color: #374151;
+    padding: 4px 8px;
+    background: #f3f4f6;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.legend-item {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 16px;
+    font-size: 11px;
+}
+
+.legend-color {
+    width: 16px;
+    height: 12px;
+    border-radius: 2px;
+    margin-right: 4px;
+}
+
+/* Drag-and-drop styles for equipment rows */
+.calendar-equipment-cell {
+    position: relative;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.calendar-equipment-cell.dragging {
+    opacity: 0.5 !important;
+    background-color: #f3f4f6 !important;
+    box-shadow: inset 0 0 0 2px #3b82f6;
+}
+
+.calendar-equipment-cell.drag-over {
+    background-color: #eff6ff !important;
+    box-shadow: inset 0 0 0 2px #3b82f6;
+    border-top: 3px solid #3b82f6;
+}
+
+.calendar-equipment-cell .drag-handle {
+    cursor: grab;
+    color: #9ca3af;
+    transition: color 0.15s ease;
+}
+
+.calendar-equipment-cell .drag-handle:hover {
+    color: #4b5563;
+}
+
+.calendar-equipment-cell .drag-handle:active {
+    cursor: grabbing;
+}
+
+/* Save order button */
+#save-order-btn {
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+#save-order-btn.hidden {
+    opacity: 0;
+    transform: translateY(-10px);
+    pointer-events: none;
+}
+
+/* Toast notification animation */
+@keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideOutRight {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(100%); opacity: 0; }
+}
+
+.toast-enter {
+    animation: slideInRight 0.3s ease forwards;
+}
+
+.toast-exit {
+    animation: slideOutRight 0.3s ease forwards;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="bg-white border-b border-gray-200 px-6 py-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">
+                <i class="fas fa-calendar-alt mr-2 text-blue-600"></i>Календарь производства
+            </h1>
+            <p class="text-sm text-gray-500 mt-1">{{ month_name }} — диаграмма Ганта</p>
+        </div>
+        <div class="flex space-x-2">
+            {% if current_user.role == 'admin' or current_user.screen_permissions is none or 'planning' in current_user.screen_permissions %}
+            <a href="/planning/plan" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm">
+                <i class="fas fa-tasks mr-2"></i>План
+            </a>
+            {% endif %}
+            <a href="/planning/calendar" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700bg-blue-500 transition text-sm">
+                <i class="fas fa-calendar-alt mr-2"></i>Календарь
+            </a>
+            {% if current_user.role == 'admin' or current_user.screen_permissions is none or 'planning_gantt' in current_user.screen_permissions %}
+            <a href="/planning/gantt" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700bg-green-500 transition text-sm">
+                <i class="fas fa-chart-bar mr-2"></i>Диаграмма Ганта
+            </a>
+            {% endif %}
+            {% if current_user.role == 'admin' or current_user.role == 'chief_designer' or current_user.screen_permissions is none or 'planning_settings' in current_user.screen_permissions %}
+            <a href="/planning/settings" class="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition text-sm">
+                <i class="fas fa-cog mr-2"></i>Настройки
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="p-4 bg-white">
+    <!-- Controls Bar -->
+    <div class="bg-white rounded-lg shadow p-3 mb-4 flex items-center justify-between flex-wrap gap-3">
+        <div class="flex items-center space-x-3">
+            <!-- Month Navigation -->
+            <a href="?year={{ year if month > 1 else year - 1 }}&month={{ month - 1 if month > 1 else 12 }}"
+               class="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                <i class="fas fa-chevron-left"></i>
+            </a>
+            <h2 class="text-lg font-bold text-gray-900 w-40 text-center">{{ month_name }}</h2>
+            <a href="?year={{ year if month < 12 else year + 1 }}&month={{ month + 1 if month < 12 else 1 }}"
+               class="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                <i class="fas fa-chevron-right"></i>
+            </a>
+            <button onclick="goToToday()" class="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200bg-blue-800/50 transition text-sm font-medium">
+                <i class="fas fa-calendar-day mr-1"></i>Сегодня
+            </button>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <!-- Equipment Filter -->
+            <button onclick="toggleFilterPanel()" class="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm">
+                <i class="fas fa-filter mr-1"></i>Фильтр станков
+                <span id="filter-count" class="ml-1 text-xs bg-blue-600 text-white px-1.5 py-0.5 rounded-full">{{ equipment|length }}</span>
+            </button>
+
+            <!-- Save Order Button (hidden by default, shown when order changes) -->
+            <button id="save-order-btn" class="hidden px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium shadow-sm" onclick="saveEquipmentOrder()" title="Сохранить новый порядок оборудования">
+                <i class="fas fa-save mr-1"></i>Сохранить порядок
+            </button>
+
+            <!-- Detail Filter -->
+            <select id="detail-filter" onchange="filterByDetail()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="__all__">Все детали</option>
+                {% set ns2 = namespace(details=[]) %}
+                {% for item in schedule %}
+                    {% set order_num = item.order_number or item.order_id %}
+                    {% set key = (item.designation or '', item.detail_name or '', order_num) %}
+                    {% if key not in ns2.details %}
+                        {% set _ = ns2.details.append(key) %}
+                        <option value="{{ key[0] }}|{{ key[1] }}|ШТ-{{ key[2] }}">
+                            {{ key[0] }}{% if key[0] and key[1] %} - {% endif %}{{ key[1] }} (ШТ-{{ key[2] }})
+                        </option>
+                    {% endif %}
+                {% endfor %}
+            </select>
+
+            <!-- View Mode -->
+            <div class="flex rounded-lg overflow-hidden border border-gray-300">
+                <button onclick="setViewMode('month')" id="view-month" class="px-3 py-2 text-sm bg-blue-600 text-white">Месяц</button>
+                <button onclick="setViewMode('week')" id="view-week" class="px-3 py-2 text-sm bg-white text-gray-700 hover:bg-gray-50">Неделя</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Panel (hidden by default) -->
+    <div id="filter-panel" class="hidden bg-white rounded-lg shadow p-4 mb-4">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold text-gray-900">Фильтр станков</h3>
+            <div class="space-x-2">
+                <button onclick="showAllEquipment()" class="text-sm text-blue-600 hover:text-blue-800text-blue-300">Показать все</button>
+                <button onclick="hideAllEquipment()" class="text-sm text-gray-600 hover:text-gray-800text-gray-300">Скрыть все</button>
+                <button onclick="saveFilterAndClose()" class="px-3 py-1 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700bg-blue-500">Сохранить</button>
+            </div>
+        </div>
+        <div class="filter-panel grid grid-cols-2 md:grid-cols-3 gap-3">
+            {% set ns3 = namespace(grouped={}) %}
+            {% for eq in equipment %}
+                {% set eq_type = eq.equipment_type or 'Другое' %}
+                {% if eq_type not in ns3.grouped %}
+                    {% set _ = ns3.grouped.update({eq_type: []}) %}
+                {% endif %}
+                {% set _ = ns3.grouped[eq_type].append(eq) %}
+            {% endfor %}
+
+            {% for group_name in ns3.grouped|sort %}
+            <div class="filter-group">
+                <div class="filter-group-header flex items-center justify-between" onclick="toggleGroup(this)">
+                    <span><i class="fas fa-folder mr-1 text-blue-500"></i>{{ group_name }}</span>
+                    <input type="checkbox" class="group-checkbox" data-group="{{ group_name }}"
+                           onchange="toggleGroupCheckboxes(this)" checked>
+                </div>
+                <div class="ml-4 mt-1 space-y-1">
+                    {% for eq in ns3.grouped[group_name]|sort(attribute='name') %}
+                    <label class="flex items-center text-sm">
+                        <input type="checkbox" class="equipment-checkbox rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                               value="{{ eq.id }}" data-group="{{ group_name }}" checked
+                               onchange="updateFilterCount()">
+                        <span class="ml-2 text-gray-700">{{ eq.name }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="bg-white rounded-lg shadow p-3 mb-4">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <div class="flex items-center gap-4">
+                <span class="text-xs font-semibold text-gray-600">Статусы:</span>
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-1">
+                        <div class="w-4 h-4 rounded bg-yellow-100 border-2 border-yellow-500"></div>
+                        <span class="text-xs text-gray-700">Запланировано</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <div class="w-4 h-4 rounded bg-blue-100 border-2 border-blue-500"></div>
+                        <span class="text-xs text-gray-700">В работе</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <div class="w-4 h-4 rounded bg-green-100 border-2 border-green-500"></div>
+                        <span class="text-xs text-gray-700">Завершено</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <div class="w-4 h-4 rounded bg-red-100 border-2 border-red-500"></div>
+                        <span class="text-xs text-gray-700">Задержка</span>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-500">Фильтр:</span>
+                <select id="status-filter-calendar" class="border border-gray-300 rounded px-2 py-1 text-xs" onchange="filterByStatus(this.value)">
+                    <option value="all">Все</option>
+                    <option value="planned">Запланировано</option>
+                    <option value="in_progress">В работе</option>
+                    <option value="completed">Завершено</option>
+                    <option value="delayed">Задержка</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calendar Grid -->
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+        <div class="calendar-scroll" style="max-height: 70vh; overflow: auto;">
+            <div class="calendar-grid" id="calendar-grid">
+                <!-- Header Row -->
+                <div class="calendar-header-cell sticky-left">
+                    <i class="fas fa-tools mr-1"></i>Станок
+                </div>
+                {% for day in range(1, days_in_month + 1) %}
+                    {% set weekday = (first_day_weekday + day - 1) % 7 %}
+                    <div class="calendar-header-cell {% if weekday >= 5 %}weekend{% endif %}">
+                        <div class="font-bold">{{ day }}</div>
+                        <div class="text-xs opacity-75">{{ ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'][weekday] }}</div>
+                    </div>
+                {% endfor %}
+
+                <!-- Equipment Rows -->
+                {% for eq in equipment %}
+                    {% if visible_equipment and eq.id not in visible_equipment %}
+                        {# Skip hidden equipment #}
+                    {% else %}
+                    <div class="calendar-equipment-cell"
+                         data-equipment-id="{{ eq.id }}"
+                         data-equipment-name="{{ eq.name }}"
+                         draggable="true"
+                         ondragstart="onEquipmentDragStart(event)"
+                         ondragend="onEquipmentDragEnd(event)"
+                         ondragover="onEquipmentDragOver(event)"
+                         ondragenter="onEquipmentDragEnter(event)"
+                         ondragleave="onEquipmentDragLeave(event)"
+                         ondrop="onEquipmentDrop(event)"
+                         title="{{ eq.name }} (перетащите для изменения порядка)">
+                        <i class="fas fa-grip-vertical drag-handle mr-1"></i>
+                        <i class="fas fa-cog mr-1 text-gray-400"></i>
+                        <span class="truncate block">{{ eq.name }}</span>
+                    </div>
+                    {% for day in range(1, days_in_month + 1) %}
+                        {% set weekday = (first_day_weekday + day - 1) % 7 %}
+                        {% set date_str = '%04d-%02d-%02d'|format(year, month, day) %}
+                        {% set key = date_str ~ '_' ~ eq.id %}
+                        {% set day_ops = schedule_by_day_eq.get(key, []) %}
+                        {% set is_today = (day == now.day and month == now.month and year == now.year) %}
+
+                        <div class="calendar-day-cell {% if weekday >= 5 %}weekend{% endif %} {% if is_today %}today{% endif %}{% if day_ops %}{% for op in day_ops %}{% if op.status == 'completed' %} has-completed{% elif op.status == 'in_progress' %} has-in-progress{% elif op.status == 'delayed' %} has-delayed{% else %} has-planned{% endif %}{% endfor %}{% endif %}"
+                             data-equipment-id="{{ eq.id }}"
+                             data-date="{{ date_str }}"
+                             onclick="openDayDialog({{ eq.id }}, '{{ date_str }}')">
+                            {% for op in day_ops[:6] %}
+                            {% if op.id %}
+                            <div class="operation-chip {{ op.status or 'planned' }} {% if op.priority == 1 %}urgent{% endif %}"
+                                 data-equipment-id="{{ op.equipment_id or '' }}"
+                                 data-designation="{{ op.designation or '' }}"
+                                 data-detail-name="{{ op.detail_name or '' }}"
+                                 data-order-number="{{ op.order_number or op.order_id or '' }}"
+                                 onclick="event.stopPropagation(); openEditDialog({{ op.id }})"
+                                 title="{{ op.operation_name or 'Операция' }} | {{ op.designation or '' }} {{ op.detail_name or '' }} | {{ op.order_quantity or op.quantity or 1 }} шт. | Нажмите для редактирования"
+                                 style="font-size: 10px !important; padding: 1px 3px !important; border: 1.5px solid !important; border-color: {% if op.status == 'completed' %}#10b981{% elif op.status == 'in_progress' %}#3b82f6{% elif op.status == 'delayed' %}#ef4444{% else %}#f59e0b{% endif %} !important; cursor: pointer;">
+                                {% if op.order_number %}<span class="font-bold text-gray-700">[ШТ-{{ op.order_number }}]</span>{% elif op.order_id %}<span class="font-bold text-gray-500">[ШТ-{{ op.order_id }}]</span>{% endif %}
+                                {% if op.designation %}{{ op.designation }}{% elif op.detail_name %}{{ op.detail_name }}{% else %}{{ op.operation_name or 'Оп.' }}{% endif %}
+                                {% if op.quantity and op.quantity > 1 %}
+                                <span class="ml-1 font-semibold" style="font-size: 9px !important;">({{ op.quantity }}шт)</span>
+                                {% endif %}
+                            </div>
+                            {% else %}
+                            <div class="operation-chip {{ op.status or 'planned' }}"
+                                 data-equipment-id="{{ op.equipment_id or '' }}"
+                                 data-designation="{{ op.designation or '' }}"
+                                 data-detail-name="{{ op.detail_name or '' }}"
+                                 data-order-number="{{ op.order_number or op.order_id or '' }}"
+                                 title="Операция без ID"
+                                 style="font-size: 10px !important; padding: 1px 3px !important; border: 1.5px solid #ccc !important; cursor: not-allowed; opacity: 0.6;">
+                                {% if op.order_number %}<span class="font-bold text-gray-700">[ШТ-{{ op.order_number }}]</span>{% elif op.order_id %}<span class="font-bold text-gray-500">[ШТ-{{ op.order_id }}]</span>{% endif %}
+                                {% if op.designation %}{{ op.designation }}{% elif op.detail_name %}{{ op.detail_name }}{% else %}{{ op.operation_name or 'Оп.' }}{% endif %}
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                            {% if day_ops|length > 6 %}
+                            <div class="text-xs text-gray-500 text-center font-medium mt-1">+{{ day_ops|length - 6 }}</div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Operation Dialog -->
+<div id="edit-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-96 max-h-[90vh] overflow-y-auto">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">Редактирование операции</h3>
+        <input type="hidden" id="edit-schedule-id">
+
+        <!-- Информация о детали -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+            <div class="flex items-center justify-between mb-2">
+                <p class="text-xs text-blue-600 font-semibold">Деталь:</p>
+                <span id="edit-order-badge" class="hidden px-2 py-1 bg-purple-600 text-white rounded-md text-xs font-bold"></span>
+            </div>
+            <p class="text-sm font-bold text-blue-900" id="edit-detail-designation">—</p>
+            <p class="text-xs text-blue-700" id="edit-detail-name">—</p>
+            <div class="flex items-center justify-between mt-2 text-xs text-blue-600">
+                <span id="edit-detail-qty">—</span>
+                <span id="edit-detail-type">—</span>
+            </div>
+        </div>
+
+        <div class="space-y-3">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Дата:</label>
+                <input type="date" id="edit-date" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Станок:</label>
+                <select id="edit-equipment" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                    {% for eq in equipment %}
+                    <option value="{{ eq.id }}">{{ eq.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Статус:</label>
+                <select id="edit-status" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                    <option value="planned">Запланировано</option>
+                    <option value="in_progress">В работе</option>
+                    <option value="completed">Завершено</option>
+                    <option value="delayed">Задержка</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Примечания:</label>
+                <textarea id="edit-notes" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2"></textarea>
+            </div>
+        </div>
+
+        <div class="flex space-x-2 mt-4">
+            <button onclick="saveEdit()" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700bg-blue-500">Сохранить</button>
+            <button onclick="deleteScheduleItem()" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200bg-red-800/50">
+                <i class="fas fa-trash"></i>
+            </button>
+            <button onclick="closeEditDialog()" class="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Отмена</button>
+        </div>
+
+        <!-- Action buttons for taken/completed -->
+        <div class="flex space-x-2 mt-2">
+            <button onclick="takeOperation()" id="btn-take" class="flex-1 px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200bg-green-800/50 text-sm">
+                <i class="fas fa-play mr-1"></i>Взять в работу
+            </button>
+            <button onclick="completeOperation()" id="btn-complete" class="flex-1 px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200bg-indigo-800/50 text-sm">
+                <i class="fas fa-check mr-1"></i>Завершить
+            </button>
+        </div>
+        
+        <!-- Информация о связанном станке -->
+        <div class="mt-3 p-2 bg-gray-50 rounded text-xs text-gray-600">
+            <p><i class="fas fa-info-circle mr-1"></i>Выбор станка из той же группы, что и в маршруте</p>
+        </div>
+    </div>
+</div>
+
+<!-- Conflict Dialog -->
+<div id="conflict-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-[600px] max-h-[90vh] overflow-y-auto">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">
+            <i class="fas fa-exclamation-triangle mr-2 text-amber-600"></i>Станок занят на выбранную дату
+        </h3>
+        
+        <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm">
+            <p class="text-amber-800 font-semibold">
+                <i class="fas fa-clock mr-1"></i>
+                Информация о загруженности станка:
+            </p>
+            <div id="conflict-details" class="mt-2 text-xs text-amber-700 space-y-1"></div>
+        </div>
+        
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Выберите действие:</label>
+            <div class="space-y-2">
+                <label class="flex items-start p-3 bg-blue-50 border border-blue-200 rounded cursor-pointer hover:bg-blue-100 transition">
+                    <input type="radio" name="conflict-action" value="change_equipment" class="mt-1" checked onchange="toggleEquipmentSelect()">
+                    <div class="ml-3">
+                        <p class="text-sm font-medium text-blue-900">Выбрать другой станок</p>
+                        <p class="text-xs text-blue-700">Операция останется на выбранную дату</p>
+                    </div>
+                </label>
+                
+                <div id="alternative-equipment-select" class="ml-6 mb-2">
+                    <select id="conflict-equipment" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">— Выберите станок —</option>
+                    </select>
+                </div>
+                
+                <label class="flex items-start p-3 bg-gray-50 border border-gray-200 rounded cursor-pointer hover:bg-gray-100 transition">
+                    <input type="radio" name="conflict-action" value="keep_equipment" class="mt-1" onchange="toggleEquipmentSelect()">
+                    <div class="ml-3">
+                        <p class="text-sm font-medium text-gray-900">Оставить этот станок</p>
+                        <p class="text-xs text-gray-700">Операция будет перенесена на следующий свободный день</p>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <div class="flex space-x-2">
+            <button onclick="resolveConflict()" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                <i class="fas fa-check mr-1"></i>Применить
+            </button>
+            <button onclick="closeConflictDialog()" class="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">
+                Отмена
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Add Operation Dialog (for empty cell) -->
+<div id="add-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-96">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">Добавить деталь в план</h3>
+        <input type="hidden" id="add-equipment-id">
+        <input type="hidden" id="add-date">
+
+        <div class="space-y-3">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Дата:</label>
+                <input type="text" id="add-date-display" class="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100" readonly>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Станок:</label>
+                <input type="text" id="add-equipment-display" class="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100" readonly>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                    <i class="fas fa-pen mr-1 text-blue-500"></i>Название детали:
+                </label>
+                <input type="text" id="add-detail-name"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2"
+                       placeholder="Введите обозначение или название детали"
+                       autocomplete="off">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                    <i class="fas fa-sort-numeric-up mr-1 text-blue-500"></i>Количество:
+                </label>
+                <input type="number" id="add-quantity"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2"
+                       value="1" min="1">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Время (мин):</label>
+                <input type="number" id="add-duration"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2"
+                       value="60" min="1">
+            </div>
+        </div>
+
+        <div class="flex space-x-2 mt-4">
+            <button onclick="addManualOperation()" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                <i class="fas fa-plus mr-1"></i>Добавить в план
+            </button>
+            <button onclick="closeAddDialog()" class="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Отмена</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast notification -->
+<div id="toast" class="fixed bottom-4 right-4 px-6 py-3 bg-green-600 text-white rounded-lg shadow-lg transform translate-y-full transition-transform duration-300 z-50">
+    <span id="toast-message"></span>
+</div>
+
+<script>
+// ==================== DRAG-AND-DROP FOR EQUIPMENT REORDERING ====================
+let draggedEquipmentId = null;
+let draggedEquipmentName = null;
+let originalOrder = [];
+let hasOrderChanged = false;
+
+function onEquipmentDragStart(event) {
+    const cell = event.target.closest('.calendar-equipment-cell');
+    if (!cell) return;
+
+    draggedEquipmentId = parseInt(cell.dataset.equipmentId);
+    draggedEquipmentName = cell.dataset.equipmentName;
+
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', draggedEquipmentId.toString());
+
+    // Визуальная обратная связь — полупрозрачность
+    setTimeout(() => {
+        cell.style.opacity = '0.4';
+    }, 0);
+
+    // Сохраняем исходный порядок
+    if (originalOrder.length === 0) {
+        storeCurrentOrder();
+    }
+}
+
+function onEquipmentDragEnd(event) {
+    // Восстанавливаем прозрачность ВСЕХ ячеек
+    document.querySelectorAll('.calendar-equipment-cell').forEach(cell => {
+        cell.style.opacity = '';
+        cell.classList.remove('drag-over');
+    });
+
+    // Небольшая задержка чтобы drop успел завершиться
+    setTimeout(() => {
+        draggedEquipmentId = null;
+        draggedEquipmentName = null;
+    }, 100);
+}
+
+function onEquipmentDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+}
+
+function onEquipmentDragEnter(event) {
+    event.preventDefault();
+    const cell = event.target.closest('.calendar-equipment-cell');
+    if (cell && parseInt(cell.dataset.equipmentId) !== draggedEquipmentId) {
+        cell.classList.add('drag-over');
+    }
+}
+
+function onEquipmentDragLeave(event) {
+    const cell = event.target.closest('.calendar-equipment-cell');
+    if (cell) {
+        cell.classList.remove('drag-over');
+    }
+}
+
+async function onEquipmentDrop(event) {
+    event.preventDefault();
+
+    const targetCell = event.target.closest('.calendar-equipment-cell');
+    if (!targetCell || !draggedEquipmentId) {
+        console.warn('⚠️ Drop cancelled:', { hasTarget: !!targetCell, hasDraggedId: !!draggedEquipmentId });
+        return;
+    }
+
+    const targetEquipmentId = parseInt(targetCell.dataset.equipmentId);
+    targetCell.classList.remove('drag-over');
+
+    if (draggedEquipmentId === targetEquipmentId) {
+        console.log('ℹ️ Drop on same equipment, ignoring');
+        return;
+    }
+
+    console.log('🔀 Drop:', { dragged: draggedEquipmentId, target: targetEquipmentId });
+
+    // Получаем текущий порядок из DOM
+    const currentOrder = getCurrentEquipmentOrder();
+    console.log('📋 Текущий порядок:', currentOrder);
+
+    const draggedIdx = currentOrder.indexOf(draggedEquipmentId);
+    const targetIdx = currentOrder.indexOf(targetEquipmentId);
+
+    if (draggedIdx === -1 || targetIdx === -1) {
+        console.error('❌ Не найдены индексы:', { draggedIdx, targetIdx });
+        return;
+    }
+
+    // Переставляем: убираем dragged из его позиции, вставляем перед target
+    currentOrder.splice(draggedIdx, 1);
+    currentOrder.splice(targetIdx, 0, draggedEquipmentId);
+
+    console.log('📋 Новый порядок:', currentOrder);
+
+    // Проверяем что порядок действительно изменился
+    if (JSON.stringify(currentOrder) === JSON.stringify(originalOrder)) {
+        console.log('ℹ️ Порядок не изменился');
+        draggedEquipmentId = null;
+        return;
+    }
+
+    // Сохраняем на сервер
+    try {
+        console.log('💾 Сохранение порядка...');
+        const saved = await saveEquipmentOrderToServer(currentOrder);
+        if (saved) {
+            showToast('✅ Порядок сохранён! Перезагрузка...', 'success');
+        } else {
+            showToast('⚠️ Сохранение не удалось, но порядок будет восстановлен', 'warning');
+        }
+    } catch (e) {
+        console.error('❌ Ошибка сохранения:', e);
+        showToast('⚠️ Ошибка сохранения, перезагрузка...', 'warning');
+    }
+
+    // Перезагружаем в ЛЮБОМ случае — чтобы восстановить визуальное состояние
+    setTimeout(() => {
+        window.location.reload();
+    }, 800);
+
+    draggedEquipmentId = null;
+    draggedEquipmentName = null;
+}
+
+function getCurrentEquipmentOrder() {
+    const cells = document.querySelectorAll('.calendar-equipment-cell[data-equipment-id]');
+    return Array.from(cells).map(cell => parseInt(cell.dataset.equipmentId));
+}
+
+function storeCurrentOrder() {
+    const cells = document.querySelectorAll('.calendar-equipment-cell[data-equipment-id]');
+    originalOrder = Array.from(cells).map(cell => parseInt(cell.dataset.equipmentId));
+}
+
+function reorderDayCells(equipmentId, newPosition, totalEquipment) {
+    // Get all day cells for this equipment
+    const dayCells = Array.from(document.querySelectorAll(`.calendar-day-cell[data-equipment-id="${equipmentId}"]`));
+    if (dayCells.length === 0) return;
+
+    const grid = document.getElementById('calendar-grid');
+    const allChildren = Array.from(grid.children);
+
+    // Calculate where to move: after equipment header + (position - 1) * (1 header + days) + days
+    // This is complex, so we'll just reload the page for visual consistency
+    // A better approach would be to track equipment positions in the grid structure
+}
+
+function storeCurrentOrder() {
+    const cells = document.querySelectorAll('.calendar-equipment-cell[data-equipment-id]');
+    originalOrder = Array.from(cells).map(cell => parseInt(cell.dataset.equipmentId));
+}
+
+function checkIfOrderChanged(currentOrder) {
+    hasOrderChanged = JSON.stringify(originalOrder) !== JSON.stringify(currentOrder);
+    updateSaveButtonVisibility();
+}
+
+function updateSaveButtonVisibility() {
+    const saveBtn = document.getElementById('save-order-btn');
+    if (hasOrderChanged) {
+        saveBtn.classList.remove('hidden');
+    } else {
+        saveBtn.classList.add('hidden');
+    }
+}
+
+async function saveEquipmentOrder() {
+    const cells = document.querySelectorAll('.calendar-equipment-cell[data-equipment-id]');
+    const equipmentOrder = Array.from(cells).map(cell => parseInt(cell.dataset.equipmentId));
+
+    try {
+        const response = await fetch('/planning/api/calendar-equipment-order', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ equipment_order: equipmentOrder })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            // Update original order
+            originalOrder = [...equipmentOrder];
+            hasOrderChanged = false;
+            updateSaveButtonVisibility();
+            showToast('✅ Порядок сохранён');
+        } else {
+            showToast('❌ Ошибка сохранения', 'error');
+        }
+    } catch (e) {
+        showToast('❌ Ошибка: ' + e.message, 'error');
+    }
+}
+
+async function saveEquipmentOrderToServer(equipmentOrder) {
+    try {
+        const response = await fetch('/planning/api/calendar-equipment-order', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ equipment_order: equipmentOrder })
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errText.substring(0, 100)}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+            originalOrder = [...equipmentOrder];
+            hasOrderChanged = false;
+            try { updateSaveButtonVisibility(); } catch(e) {}
+            return true;
+        } else {
+            // Проверяем специфичные ошибки
+            if (result.message && result.message.includes('пользователя')) {
+                throw new Error('Не удалось определить пользователя. Пожалуйста, перезайдите в систему (logout → login).');
+            }
+            throw new Error(result.message || 'Ошибка сервера');
+        }
+    } catch (e) {
+        console.error('❌ Save equipment order error:', e);
+        throw e;
+    }
+}
+
+// ==================== EXISTING FUNCTIONS ====================
+let draggedChip = null;
+
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    document.getElementById('toast-message').textContent = message;
+    toast.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg transform transition-transform duration-300 z-50 ${type === 'error' ? 'bg-red-600' : 'bg-green-600'}`;
+    toast.classList.remove('translate-y-full');
+    toast.classList.add('translate-y-0');
+    setTimeout(() => { toast.classList.remove('translate-y-0'); toast.classList.add('translate-y-full'); }, 3000);
+}
+
+function toggleFilterPanel() {
+    document.getElementById('filter-panel').classList.toggle('hidden');
+}
+
+function toggleGroup(header) {
+    const checkbox = header.querySelector('.group-checkbox');
+    checkbox.checked = !checkbox.checked;
+    toggleGroupCheckboxes(checkbox);
+}
+
+function toggleGroupCheckboxes(checkbox) {
+    const group = checkbox.dataset.group;
+    const checked = checkbox.checked;
+    document.querySelectorAll(`.equipment-checkbox[data-group="${group}"]`).forEach(cb => cb.checked = checked);
+    updateFilterCount();
+}
+
+function showAllEquipment() {
+    document.querySelectorAll('.equipment-checkbox, .group-checkbox').forEach(cb => cb.checked = true);
+    updateFilterCount();
+}
+
+function hideAllEquipment() {
+    document.querySelectorAll('.equipment-checkbox, .group-checkbox').forEach(cb => cb.checked = false);
+    updateFilterCount();
+}
+
+function updateFilterCount() {
+    const count = document.querySelectorAll('.equipment-checkbox:checked').length;
+    const total = document.querySelectorAll('.equipment-checkbox').length;
+    document.getElementById('filter-count').textContent = `${count}/${total}`;
+    document.querySelectorAll('.group-checkbox').forEach(cb => {
+        const group = cb.dataset.group;
+        const all = document.querySelectorAll(`.equipment-checkbox[data-group="${group}"]`);
+        cb.checked = [...all].every(c => c.checked);
+    });
+}
+
+function saveFilterAndClose() {
+    const visibleEquipment = [...document.querySelectorAll('.equipment-checkbox:checked')].map(cb => parseInt(cb.value));
+    fetch('/planning/api/calendar-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visible_equipment: visibleEquipment, equipment_order: [], panel_visible: true })
+    }).then(() => {
+        showToast('Фильтр сохранён');
+        toggleFilterPanel();
+        location.reload();
+    }).catch(e => showToast('Ошибка: ' + e.message, 'error'));
+}
+
+function filterByDetail() {
+    const value = document.getElementById('detail-filter').value;
+    const chips = document.querySelectorAll('.operation-chip');
+    const visibleEquipmentIds = new Set();
+
+    chips.forEach(chip => {
+        if (value === '__all__') {
+            chip.style.display = '';
+            const eqId = chip.dataset.equipmentId;
+            if (eqId) visibleEquipmentIds.add(eqId);
+        } else {
+            const parts = value.split('|');
+            const designation = parts[0] || '';
+            const detailName = parts[1] || '';
+            const orderNumPrefix = parts[2] || '';  // "ШТ-70"
+
+            const chipDesignation = chip.dataset.designation || '';
+            const chipDetail = chip.dataset.detailName || '';
+            const chipOrderNum = 'ШТ-' + (chip.dataset.orderNumber || '');
+
+            const matches = (chipDesignation === designation) &&
+                           (chipDetail === detailName) &&
+                           (orderNumPrefix === '' || chipOrderNum === orderNumPrefix);
+
+            chip.style.display = matches ? '' : 'none';
+
+            if (matches && chip.dataset.equipmentId) {
+                visibleEquipmentIds.add(chip.dataset.equipmentId);
+            }
+        }
+    });
+
+    // Скрываем/показываем строки станков
+    const equipmentCells = document.querySelectorAll('.calendar-equipment-cell[data-equipment-id]');
+    equipmentCells.forEach(cell => {
+        const eqId = cell.dataset.equipmentId;
+        if (value === '__all__') {
+            cell.style.display = '';
+            let sibling = cell.nextElementSibling;
+            while (sibling && sibling.classList.contains('calendar-day-cell')) {
+                sibling.style.display = '';
+                sibling = sibling.nextElementSibling;
+            }
+        } else if (visibleEquipmentIds.has(eqId)) {
+            cell.style.display = '';
+            let sibling = cell.nextElementSibling;
+            while (sibling && sibling.classList.contains('calendar-day-cell')) {
+                sibling.style.display = '';
+                sibling = sibling.nextElementSibling;
+            }
+        } else {
+            cell.style.display = 'none';
+            let sibling = cell.nextElementSibling;
+            while (sibling && sibling.classList.contains('calendar-day-cell')) {
+                sibling.style.display = 'none';
+                sibling = sibling.nextElementSibling;
+            }
+        }
+    });
+
+    // Обновляем чекбоксы фильтра станков
+    document.querySelectorAll('.equipment-checkbox').forEach(cb => {
+        if (value === '__all__') {
+            cb.checked = true;
+        } else {
+            cb.checked = visibleEquipmentIds.has(cb.value);
+        }
+    });
+
+    // Обновляем счётчик
+    updateFilterCount();
+}
+
+function setViewMode(mode) {
+    document.getElementById('view-month').className = mode === 'month' ? 'px-3 py-2 text-sm bg-blue-600 text-white' : 'px-3 py-2 text-sm bg-white text-gray-700 hover:bg-gray-50';
+    document.getElementById('view-week').className = mode === 'week' ? 'px-3 py-2 text-sm bg-blue-600 text-white' : 'px-3 py-2 text-sm bg-white text-gray-700 hover:bg-gray-50';
+}
+
+function goToToday() {
+    const now = new Date();
+    location.href = `?year=${now.getFullYear()}&month=${now.getMonth() + 1}`;
+}
+
+function openEditDialog(scheduleId) {
+    if (!scheduleId || scheduleId === 'undefined' || scheduleId === 'null') {
+        showToast('Ошибка: операция не имеет ID', 'error');
+        return;
+    }
+
+    document.getElementById('edit-schedule-id').value = scheduleId;
+    // Fetch schedule item details
+    fetch(`/planning/api/schedule`)
+        .then(r => r.json())
+        .then(data => {
+            const item = data.schedule.find(s => s.id === scheduleId);
+            if (item) {
+                document.getElementById('edit-date').value = item.planned_date ? item.planned_date.substring(0, 10) : '';
+                document.getElementById('edit-status').value = item.status || 'planned';
+                document.getElementById('edit-notes').value = item.notes || '';
+                document.getElementById('btn-take').style.display = item.status === 'planned' ? '' : 'none';
+                document.getElementById('btn-complete').style.display = (item.status === 'planned' || item.status === 'in_progress') ? '' : 'none';
+
+                // Заполняем информацию о детали
+                document.getElementById('edit-detail-designation').textContent = item.designation || '—';
+                document.getElementById('edit-detail-name').textContent = item.detail_name || '—';
+
+                // Количество на сегодня (из schedule item quantity, не общее количество заказа)
+                const scheduledQty = item.quantity || 1;
+                document.getElementById('edit-detail-qty').textContent = `${scheduledQty} шт.`;
+
+                // Номер заказа/партии (единообразно с Планом)
+                const badgeEl = document.getElementById('edit-order-badge');
+                const orderNum = item.order_number || item.order_id;
+                if (item.production_type === 'batch' && item.batch_number) {
+                    badgeEl.textContent = item.batch_number;
+                    badgeEl.className = 'px-2 py-1 bg-purple-600 text-white rounded-md text-xs font-bold';
+                } else if (orderNum) {
+                    badgeEl.textContent = `ШТ-${orderNum}`;
+                    badgeEl.className = 'px-2 py-1 bg-blue-600 text-white rounded-md text-xs font-bold';
+                } else {
+                    badgeEl.textContent = `ШТ-${item.order_id}`;
+                    badgeEl.className = 'px-2 py-1 bg-blue-600 text-white rounded-md text-xs font-bold';
+                }
+                badgeEl.classList.remove('hidden');
+
+                // Тип производства
+                const prodType = item.production_type === 'batch' ? '📦 Партийное' : '🔹 Штучное';
+                document.getElementById('edit-detail-type').textContent = prodType;
+                
+                // Заполняем выпадающий список станков только из той же группы (по типу операции)
+                const equipmentSelect = document.getElementById('edit-equipment');
+                equipmentSelect.innerHTML = '';
+                
+                const operationTypeId = item.operation_type_id;
+                
+                // Сохраняем данные для проверки конфликтов
+                window._currentOperationTypeId = operationTypeId;
+                window._currentOrderId = item.order_id;
+                window._currentDuration = item.duration_minutes || 0;
+                window._currentQuantity = item.order_quantity || 1;
+                
+                if (operationTypeId) {
+                    // Загружаем станки для этого типа операции
+                    fetch(`/planning/api/equipment-by-operation/${operationTypeId}`)
+                        .then(r => r.json())
+                        .then(eqData => {
+                            if (eqData.success && eqData.equipment.length > 0) {
+                                eqData.equipment.forEach(eq => {
+                                    const opt = document.createElement('option');
+                                    opt.value = eq.id;
+                                    opt.textContent = eq.name;
+                                    if (eq.id === item.equipment_id) {
+                                        opt.selected = true;
+                                    }
+                                    equipmentSelect.appendChild(opt);
+                                });
+                            } else {
+                                // Fallback - все станки
+                                loadAllEquipment(equipmentSelect, item.equipment_id);
+                            }
+                        })
+                        .catch(() => loadAllEquipment(equipmentSelect, item.equipment_id));
+                } else {
+                    // Fallback - все станки
+                    loadAllEquipment(equipmentSelect, item.equipment_id);
+                }
+            }
+            document.getElementById('edit-dialog').classList.remove('hidden');
+        })
+        .catch(e => showToast('Ошибка загрузки: ' + e.message, 'error'));
+}
+
+function closeEditDialog() {
+    document.getElementById('edit-dialog').classList.add('hidden');
+}
+
+function loadAllEquipment(equipmentSelect, selectedId) {
+    fetch('/planning/api/equipment-calendar')
+        .then(r => r.json())
+        .then(eqData => {
+            if (eqData.success) {
+                eqData.equipment.forEach(eq => {
+                    const opt = document.createElement('option');
+                    opt.value = eq.id;
+                    opt.textContent = eq.name;
+                    if (eq.id === selectedId) {
+                        opt.selected = true;
+                    }
+                    equipmentSelect.appendChild(opt);
+                });
+            }
+        })
+        .catch(e => console.error('Error loading equipment:', e));
+}
+
+async function saveEdit() {
+    const id = document.getElementById('edit-schedule-id').value;
+    const body = {
+        planned_date: document.getElementById('edit-date').value,
+        equipment_id: parseInt(document.getElementById('edit-equipment').value),
+        status: document.getElementById('edit-status').value,
+        notes: document.getElementById('edit-notes').value
+    };
+    
+    if (!body.planned_date) {
+        showToast('Выберите дату', 'error');
+        return;
+    }
+    
+    // Сохраняем текущие данные
+    window._currentEditData = { id, body };
+    
+    // Проверяем конфликты
+    try {
+        const conflictResponse = await fetch('/planning/api/check-conflicts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                equipment_id: body.equipment_id,
+                start_date: body.planned_date,
+                operation_type_id: window._currentOperationTypeId,
+                order_id: window._currentOrderId,
+                duration_minutes: window._currentDuration,
+                quantity: window._currentQuantity
+            })
+        });
+        
+        const conflictResult = await conflictResponse.json();
+        
+        if (conflictResult.success && conflictResult.has_conflict) {
+            // Есть конфликт - показываем диалог
+            showConflictDialog(conflictResult);
+            return;
+        }
+        
+        // Нет конфликта - сохраняем
+        await applySaveEdit();
+    } catch (e) {
+        showToast('Ошибка проверки конфликтов: ' + e.message, 'error');
+    }
+}
+
+async function applySaveEdit() {
+    const { id, body } = window._currentEditData;
+    
+    // Сохраняем позицию прокрутки
+    const scrollContainer = document.querySelector('.calendar-scroll');
+    sessionStorage.setItem('scrollPosition', scrollContainer?.scrollTop || 0);
+    sessionStorage.setItem('scrollLeft', scrollContainer?.scrollLeft || 0);
+    
+    try {
+        const response = await fetch(`/planning/api/schedule/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const result = await response.json();
+        if (result.success) {
+            showToast('✅ Операция обновлена');
+            closeEditDialog();
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showToast('Ошибка: ' + (result.message || 'Неизвестная'), 'error');
+        }
+    } catch (e) { showToast('Ошибка сети: ' + e.message, 'error'); }
+}
+
+function toggleEquipmentSelect() {
+    const action = document.querySelector('input[name="conflict-action"]:checked').value;
+    const equipmentSelect = document.getElementById('alternative-equipment-select');
+    
+    if (action === 'change_equipment') {
+        equipmentSelect.style.display = 'block';
+    } else {
+        equipmentSelect.style.display = 'none';
+    }
+}
+
+function showConflictDialog(conflictResult) {
+    const detailsDiv = document.getElementById('conflict-details');
+    const equipmentSelect = document.getElementById('conflict-equipment');
+    
+    // Показываем детали конфликта
+    let detailsHTML = '';
+    
+    if (conflictResult.conflicts && conflictResult.conflicts.length > 0) {
+        detailsHTML += '<p class="font-semibold mt-1">Занято другими заказами:</p>';
+        detailsHTML += '<ul class="list-disc ml-4">';
+        conflictResult.conflicts.forEach(c => {
+            detailsHTML += `<li>${c.designation || 'Без обозначения'} - ${c.detail_name || 'Без имени'} (${c.duration_minutes} мин)</li>`;
+        });
+        detailsHTML += '</ul>';
+    }
+    
+    detailsHTML += `<p class="mt-2 font-semibold">Статистика дня:</p>`;
+    detailsHTML += `<p>• Занято: ${conflictResult.total_busy_minutes} мин из 420 мин (7ч)</p>`;
+    detailsHTML += `<p>• Свободно: ${conflictResult.free_minutes} мин</p>`;
+    
+    if (conflictResult.has_partial_fit) {
+        detailsHTML += `<p class="text-amber-800">• Поместится деталей: ${conflictResult.parts_can_fit} из ${conflictResult.quantity_needed}</p>`;
+    } else if (conflictResult.is_completely_busy) {
+        detailsHTML += `<p class="text-red-800 font-semibold">• Станок полностью занят на этот день</p>`;
+    } else {
+        detailsHTML += `<p class="text-green-800">• Все детали (${conflictResult.quantity_needed}) поместятся</p>`;
+    }
+    
+    detailsDiv.innerHTML = detailsHTML;
+    
+    // Заполняем альтернативные станки
+    equipmentSelect.innerHTML = '<option value="">— Выберите станок —</option>';
+    if (conflictResult.alternative_equipment && conflictResult.alternative_equipment.length > 0) {
+        conflictResult.alternative_equipment.forEach(eq => {
+            const opt = document.createElement('option');
+            opt.value = eq.id;
+            opt.textContent = eq.name;
+            equipmentSelect.appendChild(opt);
+        });
+    } else {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'Нет доступных альтернатив';
+        opt.disabled = true;
+        equipmentSelect.appendChild(opt);
+    }
+    
+    // Сохраняем данные конфликта
+    window._currentConflict = conflictResult;
+    
+    // Сбрасываем radio на "Выбрать другой станок"
+    document.querySelector('input[name="conflict-action"][value="change_equipment"]').checked = true;
+    toggleEquipmentSelect();
+    
+    // Показываем диалог
+    document.getElementById('conflict-dialog').classList.remove('hidden');
+}
+
+function closeConflictDialog() {
+    document.getElementById('conflict-dialog').classList.add('hidden');
+}
+
+async function resolveConflict() {
+    const action = document.querySelector('input[name="conflict-action"]:checked').value;
+    
+    if (action === 'change_equipment') {
+        const newEquipmentId = document.getElementById('conflict-equipment').value;
+        
+        if (!newEquipmentId) {
+            showToast('Выберите альтернативный станок', 'error');
+            return;
+        }
+        
+        // Обновляем данные сохранения с новым станком
+        window._currentEditData.body.equipment_id = parseInt(newEquipmentId);
+        
+        closeConflictDialog();
+        
+        // Проверяем снова на конфликты
+        try {
+            const conflictResponse = await fetch('/planning/api/check-conflicts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    equipment_id: parseInt(newEquipmentId),
+                    start_date: window._currentEditData.body.planned_date,
+                    operation_type_id: window._currentOperationTypeId,
+                    order_id: window._currentOrderId,
+                    duration_minutes: window._currentDuration,
+                    quantity: window._currentQuantity
+                })
+            });
+            
+            const conflictResult = await conflictResponse.json();
+            
+            if (conflictResult.success && conflictResult.has_conflict) {
+                // Снова конфликт - показываем диалог ещё раз
+                showConflictDialog(conflictResult);
+                return;
+            }
+            
+            // Нет конфликта - сохраняем
+            await applySaveEdit();
+        } catch (e) {
+            showToast('Ошибка проверки: ' + e.message, 'error');
+        }
+    } else {
+        // Оставляем тот же станок - система автоматически найдёт свободный день
+        closeConflictDialog();
+        await applySaveEdit();
+    }
+}
+
+async function deleteScheduleItem() {
+    if (!confirm('Удалить эту операцию из расписания?')) return;
+    const id = document.getElementById('edit-schedule-id').value;
+    
+    // Сохраняем позицию прокрутки (и вертикальную, и горизонтальную)
+    const scrollContainer = document.querySelector('.calendar-scroll');
+    sessionStorage.setItem('scrollPosition', scrollContainer?.scrollTop || 0);
+    sessionStorage.setItem('scrollLeft', scrollContainer?.scrollLeft || 0);
+    
+    try {
+        const response = await fetch(`/planning/api/schedule/${id}`, { method: 'DELETE' });
+        const result = await response.json();
+        if (result.success) {
+            showToast('Операция удалена');
+            closeEditDialog();
+            sessionStorage.setItem('scrollPosition', document.querySelector('.calendar-scroll')?.scrollTop || 0);
+            sessionStorage.setItem('scrollLeft', document.querySelector('.calendar-scroll')?.scrollLeft || 0);
+            setTimeout(() => location.reload(), 500);
+        }
+    } catch (e) { showToast('Ошибка сети: ' + e.message, 'error'); }
+}
+
+async function takeOperation() {
+    const id = document.getElementById('edit-schedule-id').value;
+    
+    // Сохраняем позицию прокрутки (и вертикальную, и горизонтальную)
+    const scrollContainer = document.querySelector('.calendar-scroll');
+    sessionStorage.setItem('scrollPosition', scrollContainer?.scrollTop || 0);
+    sessionStorage.setItem('scrollLeft', scrollContainer?.scrollLeft || 0);
+    
+    try {
+        const response = await fetch(`/planning/api/schedule/${id}/take`, { method: 'POST' });
+        const result = await response.json();
+        if (result.success) { showToast('Операция взята в работу'); closeEditDialog(); sessionStorage.setItem('scrollPosition', document.querySelector('.calendar-scroll')?.scrollTop || 0); sessionStorage.setItem('scrollLeft', document.querySelector('.calendar-scroll')?.scrollLeft || 0); setTimeout(() => location.reload(), 500); }
+    } catch (e) { showToast('Ошибка: ' + e.message, 'error'); }
+}
+
+async function completeOperation() {
+    const id = document.getElementById('edit-schedule-id').value;
+    
+    // Сохраняем позицию прокрутки (и вертикальную, и горизонтальную)
+    const scrollContainer = document.querySelector('.calendar-scroll');
+    sessionStorage.setItem('scrollPosition', scrollContainer?.scrollTop || 0);
+    sessionStorage.setItem('scrollLeft', scrollContainer?.scrollLeft || 0);
+    
+    try {
+        const response = await fetch(`/planning/api/schedule/${id}/complete`, { method: 'POST' });
+        const result = await response.json();
+        if (result.success) { showToast('Операция завершена'); closeEditDialog(); sessionStorage.setItem('scrollPosition', document.querySelector('.calendar-scroll')?.scrollTop || 0); sessionStorage.setItem('scrollLeft', document.querySelector('.calendar-scroll')?.scrollLeft || 0); setTimeout(() => location.reload(), 500); }
+    } catch (e) { showToast('Ошибка: ' + e.message, 'error'); }
+}
+
+function openDayDialog(equipmentId, date) {
+    console.log('📅 openDayDialog called:', { equipmentId, date });
+
+    document.getElementById('add-equipment-id').value = equipmentId;
+    document.getElementById('add-date').value = date;
+    document.getElementById('add-date-display').value = date;
+
+    // Получаем название станка из data-equipment-name (надёжнее чем textContent)
+    const eqCell = document.querySelector(`.calendar-equipment-cell[data-equipment-id="${equipmentId}"]`);
+    const eqName = eqCell?.dataset?.equipmentName || eqCell?.textContent?.trim() || '';
+    console.log('🔧 Equipment name found:', eqName);
+
+    document.getElementById('add-equipment-display').value = eqName;
+
+    // Очищаем поля ввода
+    document.getElementById('add-detail-name').value = '';
+    document.getElementById('add-quantity').value = '1';
+    document.getElementById('add-duration').value = '60';
+
+    document.getElementById('add-dialog').classList.remove('hidden');
+
+    // Фокус на поле ввода детали
+    setTimeout(() => {
+        const detailInput = document.getElementById('add-detail-name');
+        if (detailInput) detailInput.focus();
+    }, 100);
+}
+
+function closeAddDialog() {
+    document.getElementById('add-dialog').classList.add('hidden');
+}
+
+async function addManualOperation() {
+    const detailName = document.getElementById('add-detail-name').value.trim();
+    const quantity = parseInt(document.getElementById('add-quantity').value);
+    const duration = parseInt(document.getElementById('add-duration').value);
+    const equipmentId = document.getElementById('add-equipment-id').value;
+    const date = document.getElementById('add-date').value;
+
+    if (!detailName) { showToast('Введите название детали', 'error'); return; }
+    if (!quantity || quantity < 1) { showToast('Укажите корректное количество', 'error'); return; }
+    if (!equipmentId) { showToast('Ошибка: станок не выбран', 'error'); return; }
+
+    // Показываем расчёт времени
+    const totalTime = duration * quantity;
+    const workdayLimit = 420; // 7 часов
+    
+    if (totalTime > workdayLimit) {
+        const daysNeeded = Math.ceil(totalTime / workdayLimit);
+        showToast(`⏳ ${totalTime} мин (${quantity} шт × ${duration} мин) → ${daysNeeded} дн.`);
+    } else {
+        showToast('⏳ Добавление в план...');
+    }
+
+    try {
+        const response = await fetch('/planning/api/manual-schedule', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                detail_name: detailName,
+                quantity: quantity,
+                equipment_id: parseInt(equipmentId),
+                planned_date: date,
+                duration_minutes: duration,
+                priority: 5,
+            }),
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            const scheduleCount = result.schedule_count || 1;
+            if (scheduleCount > 1) {
+                showToast(`✅ Деталь добавлена в план (${scheduleCount} дн.)`);
+            } else {
+                showToast('✅ Деталь добавлена в план');
+            }
+            closeAddDialog();
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showToast('❌ ' + (result.message || 'Ошибка добавления'), 'error');
+        }
+    } catch (e) {
+        showToast('❌ Ошибка сети: ' + e.message, 'error');
+    }
+}
+
+// Load orders for add dialog
+document.addEventListener('DOMContentLoaded', () => {
+    // Load saved equipment order
+    loadEquipmentOrder();
+
+    // Восстанавливаем позицию прокрутки с задержкой (DOM должен быть полностью готов)
+    setTimeout(() => {
+        const scrollContainer = document.querySelector('.calendar-scroll');
+        const scrollPos = sessionStorage.getItem('scrollPosition');
+        const scrollLeft = sessionStorage.getItem('scrollLeft');
+
+        console.log('Restoring scroll:', { scrollPos, scrollLeft, container: !!scrollContainer });
+
+        if (scrollContainer) {
+            if (scrollPos) {
+                scrollContainer.scrollTop = parseInt(scrollPos);
+                console.log('Restored scrollTop to:', scrollPos);
+            }
+            if (scrollLeft) {
+                scrollContainer.scrollLeft = parseInt(scrollLeft);
+                console.log('Restored scrollLeft to:', scrollLeft);
+            }
+        }
+
+        sessionStorage.removeItem('scrollPosition');
+        sessionStorage.removeItem('scrollLeft');
+    }, 300);
+});
+
+// ==================== LOAD SAVED EQUIPMENT ORDER ON PAGE LOAD ====================
+async function loadEquipmentOrder() {
+    try {
+        const response = await fetch('/planning/api/calendar-equipment-order');
+        const result = await response.json();
+
+        if (result.success && result.equipment_order && result.equipment_order.length > 0) {
+            // Reorder equipment cells based on saved order
+            const grid = document.getElementById('calendar-grid');
+            const savedOrder = result.equipment_order;
+
+            // Get all equipment cells
+            const equipmentCells = Array.from(document.querySelectorAll('.calendar-equipment-cell[data-equipment-id]'));
+
+            // Create a map for quick lookup
+            const cellMap = {};
+            equipmentCells.forEach(cell => {
+                cellMap[cell.dataset.equipmentId] = cell;
+            });
+
+            // Reorder: move equipment cells according to saved order
+            let insertAfterHeader = false;
+            savedOrder.forEach(eqId => {
+                const cell = cellMap[eqId.toString()];
+                if (cell) {
+                    grid.appendChild(cell);
+
+                    // Move associated day cells
+                    const dayCells = document.querySelectorAll(`.calendar-day-cell[data-equipment-id="${eqId}"]`);
+                    dayCells.forEach(dayCell => {
+                        grid.appendChild(dayCell);
+                    });
+                }
+            });
+
+            // Append any remaining equipment that wasn't in saved order
+            equipmentCells.forEach(cell => {
+                if (!savedOrder.includes(parseInt(cell.dataset.equipmentId))) {
+                    grid.appendChild(cell);
+
+                    const eqId = cell.dataset.equipmentId;
+                    const dayCells = document.querySelectorAll(`.calendar-day-cell[data-equipment-id="${eqId}"]`);
+                    dayCells.forEach(dayCell => {
+                        grid.appendChild(dayCell);
+                    });
+                }
+            });
+
+            // Store as original order
+            storeCurrentOrder();
+            console.log('Loaded saved equipment order:', savedOrder);
+        } else {
+            // No saved order, store current order as original
+            storeCurrentOrder();
+        }
+    } catch (e) {
+        console.error('Failed to load equipment order:', e);
+        storeCurrentOrder();
+    }
+}
+
+// ==================== FILTER BY STATUS ====================
+function filterByStatus(status) {
+    const chips = document.querySelectorAll('.operation-chip');
+    chips.forEach(chip => {
+        const chipStatus = chip.classList.contains('planned') ? 'planned' :
+                          chip.classList.contains('in_progress') ? 'in_progress' :
+                          chip.classList.contains('completed') ? 'completed' :
+                          chip.classList.contains('delayed') ? 'delayed' : '';
+        
+        if (status === 'all' || chipStatus === status) {
+            chip.style.display = '';
+        } else {
+            chip.style.display = 'none';
+        }
+    });
+}
+</script>
+
+{% endblock %}
+
+{% block extra_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', path='js/planning.js') }}"></script>
+
+<!-- Calendar CSS — вставляем ПОСЛЕ Tailwind через JS -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var style = document.createElement('style');
+    style.id = 'calendar-styles';
+    style.textContent = '.calendar-container{position:relative}.calendar-scroll{overflow:auto;max-height:70vh;position:relative}.calendar-grid{display:grid!important;grid-template-columns:200px repeat({{ days_in_month }}, minmax(120px, 1fr))!important;grid-auto-rows:auto;min-width:max-content;gap:0}.calendar-header-cell{position:sticky;top:0;z-index:20;background:#f9fafb;padding:6px 4px;text-align:center;font-size:11px;font-weight:600}.calendar-header-cell.sticky-left{left:0;z-index:30;background:#f3f4f6;padding:8px;text-align:left;font-size:12px;font-weight:700}.calendar-header-cell.weekend{background:#fef2f2;color:#991b1b}.calendar-equipment-cell{position:sticky;left:0;z-index:10;background:#f9fafb;padding:6px 8px;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.calendar-day-cell{position:relative;padding:3px;min-height:40px;background:white;cursor:pointer;transition:background-color .15s;display:flex;flex-direction:column;gap:2px}.calendar-day-cell:hover{background:#f9fafb}.calendar-day-cell.weekend{background:#fef2f2}.calendar-day-cell.today{background:#eff6ff}.calendar-grid>*{border:1px solid #d1d5db}';
+    document.head.appendChild(style);
+});
+</script>
+{% endblock %}

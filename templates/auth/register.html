@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <title>Регистрация | Склад Инструментов</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/static/js/tailwind-config.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body class="h-full flex items-center justify-center py-12" style="background-color: #ffffff; color: #1a1a1a;">
+
+    <div class="max-w-md w-full bg-white rounded-xl shadow-2xl p-8">
+        <div class="text-center mb-8">
+            <i class="fas fa-user-plus text-5xl text-accent mb-4"></i>
+            <h1 class="text-2xl font-bold text-gray-900">Регистрация</h1>
+            <p class="text-gray-600 mt-2">Создайте учётную запись</p>
+        </div>
+
+        {% if error_message %}
+        <div class="bg-error-bg border border-error-border text-error px-4 py-3 rounded-lg mb-4">
+            <i class="fas fa-exclamation-circle mr-2"></i>{{ error_message }}
+        </div>
+        {% endif %}
+
+        <form method="POST" action="/register" class="space-y-4" id="registerForm" onsubmit="return validateForm()">
+            <div>
+                <label class="block text-sm font-medium text-gray-600 mb-2">
+                    <i class="fas fa-at mr-1"></i>Логин *
+                </label>
+                <input type="text" name="login" required
+                       class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent"
+                       placeholder="Для входа в систему">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-600 mb-2">
+                    <i class="fas fa-user mr-1"></i>Фамилия *
+                </label>
+                <input type="text" name="surname" required
+                       class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent"
+                       placeholder="Ваша фамилия">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-600 mb-2">
+                    <i class="fas fa-user mr-1"></i>Имя *
+                </label>
+                <input type="text" name="username" required
+                       class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent"
+                       placeholder="Ваше имя">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-600 mb-2">
+                    <i class="fas fa-lock mr-1"></i>Пароль *
+                </label>
+                <input type="password" name="password" id="password" required
+                       class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent"
+                       placeholder="Минимум 4 символа">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-600 mb-2">
+                    <i class="fas fa-lock mr-1"></i>Подтверждение пароля *
+                </label>
+                <input type="password" name="confirm_password" id="confirm_password" required
+                       class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent"
+                       placeholder="Повторите пароль"
+                       oninput="checkPasswordMatch()">
+                <span id="password_match_error" class="text-red-500 text-sm mt-1" style="display:none;">
+                    <i class="fas fa-exclamation-circle mr-1"></i>Пароли не совпадают
+                </span>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-600 mb-2">
+                    <i class="fas fa-cogs mr-1"></i>Станки *
+                </label>
+                <div class="border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto">
+                    {% for eq in equipment %}
+                    <label class="flex items-center py-1 cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox"
+                               class="workstation-checkbox w-4 h-4 text-accent rounded border-gray-300 focus:ring-accent"
+                               value="{{ eq.id }}">
+                        <span class="ml-2 text-gray-900">{{ eq.name }}{% if eq.inventory_number %} ({{ eq.inventory_number }}){% endif %}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                <!-- Hidden input to store selected workstation IDs as JSON -->
+                <input type="hidden" name="workstation_ids_json" id="workstation_ids_json" value="[]">
+                <p class="text-xs text-gray-500 mt-1">Выберите станки, за которыми работаете</p>
+            </div>
+
+            <button type="submit" id="submitBtn"
+                    class="w-full bg-accent hover:bg-accent-hover text-white font-medium py-2 px-4 rounded-lg transition duration-200">
+                <i class="fas fa-user-plus mr-2"></i>Зарегистрироваться
+            </button>
+        </form>
+
+        <div class="mt-6 text-center">
+            <a href="/login" class="text-accent hover:text-accent-hover text-sm">
+                <i class="fas fa-sign-in-alt mr-1"></i>Уже есть аккаунт? Войти
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // Global function for password matching check
+        function checkPasswordMatch() {
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirm_password').value;
+            const errorSpan = document.getElementById('password_match_error');
+
+            if (confirmPassword.length > 0 && password !== confirmPassword) {
+                errorSpan.style.display = 'block';
+                document.getElementById('confirm_password').classList.add('border-red-500');
+            } else {
+                errorSpan.style.display = 'none';
+                document.getElementById('confirm_password').classList.remove('border-red-500');
+            }
+        }
+
+        // Main form validation
+        function validateForm() {
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirm_password').value;
+
+            if (password !== confirmPassword) {
+                document.getElementById('password_match_error').style.display = 'block';
+                return false;
+            }
+
+            if (password.length < 4) {
+                alert('Пароль должен быть минимум 4 символа');
+                return false;
+            }
+
+            // Собираем выбранные ID в массив
+            const selectedIds = [];
+            document.querySelectorAll('.workstation-checkbox:checked').forEach(cb => {
+                if (cb.value) selectedIds.push(cb.value);
+            });
+
+            console.log('Selected workstation IDs:', selectedIds);
+
+            // Записываем массив в скрытое поле
+            document.getElementById('workstation_ids_json').value = JSON.stringify(selectedIds);
+            console.log('Hidden input value:', document.getElementById('workstation_ids_json').value);
+
+            // Проверяем что выбран хотя бы один станок
+            if (selectedIds.length === 0) {
+                alert('Выберите хотя бы один станок');
+                return false;
+            }
+
+            return true;
+        }
+
+        // Debug: log form submission
+        document.getElementById('registerForm').addEventListener('submit', function(e) {
+            console.log('Form submitted at', new Date().toISOString());
+            console.log('workstation_ids_json:', document.getElementById('workstation_ids_json').value);
+        });
+
+        // Debug: log checkbox changes
+        document.querySelectorAll('.workstation-checkbox').forEach(cb => {
+            cb.addEventListener('change', function() {
+                console.log('Checkbox', this.value, 'changed to', this.checked);
+            });
+        });
+    </script>
+</body>
+</html>
