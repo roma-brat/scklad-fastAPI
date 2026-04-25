@@ -208,6 +208,12 @@ async function loadMyInProgressTasks() {
             if (task.has_otk_approved) badges += '<span class="badge badge-success">✅ ОТК одобрил</span> ';
             if (task.has_otk_pending && !task.has_otk_approved) badges += '<span class="badge badge-warning">⏳ На ОТК</span> ';
 
+            // Кнопка PDF если есть файл
+            let pdfBtn = '';
+            if (task.pdf_file && task.route_id) {
+                pdfBtn = `<button class="btn-action" onclick="window.open('/routes/${task.route_id}/pdf', '_blank')">📄 PDF</button>`;
+            }
+
             return `
                 <div class="card" style="border-left: 4px solid ${borderColor};" data-order-id="${task.order_id}" data-schedule-id="${task.id}">
                     <div class="card-header">
@@ -226,6 +232,7 @@ async function loadMyInProgressTasks() {
                     </div>
                     <div class="card-actions">
                         ${completeBtn}
+                        ${pdfBtn}
                     </div>
                 </div>
             `;

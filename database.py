@@ -2422,11 +2422,12 @@ class DatabaseManager:
                        ps.taken_at, ps.completed_at, ps.taken_by, ps.completed_by,
                        ps.is_cooperation, ps.coop_company_name, ps.coop_duration_days,
                        e.name as equipment_name,
-                       dr.designation, dr.detail_name, o.quantity as order_quantity,
+                       dr.id as route_id, dr.designation, dr.detail_name, o.quantity as order_quantity,
                        o.production_type, o.batch_number, o.order_number,
                        ot.name as operation_name,
                        ro.sequence_number, ro.operation_type_id, ro.total_time,
-                       mi.mark_name, mi.sortament_name
+                       mi.mark_name, mi.sortament_name,
+                       dr.pdf_file, dr.pdf_path
                 FROM production_schedule ps
                 JOIN orders o ON ps.order_id = o.id
                 LEFT JOIN detail_routes dr ON o.route_id = dr.id
