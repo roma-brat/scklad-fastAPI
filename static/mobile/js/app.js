@@ -656,6 +656,10 @@ async function takeTask(scheduleId, orderId) {
         if (data.success) {
             showMessage('✅ Задача взята в работу', 'success');
             loadTasks(currentTaskPeriod);
+            // Обновляем "Мои задачи в работе"
+            if (typeof loadMyInProgressTasks === 'function') {
+                loadMyInProgressTasks();
+            }
         } else {
             showMessage(data.message || 'Ошибка', 'error');
         }
@@ -806,6 +810,10 @@ async function addToolToTask() {
         if (data.success) {
             showMessage('✅ Инструмент добавлен', 'success');
             loadTasks(currentTaskPeriod);
+            // Обновляем "Мои задачи в работе"
+            if (typeof loadMyInProgressTasks === 'function') {
+                loadMyInProgressTasks();
+            }
         } else {
             showMessage(data.message || 'Ошибка', 'error');
         }
@@ -933,6 +941,10 @@ async function submitSelectedTools(orderId, scheduleId) {
     if (tools.length === 0) {
         closeDialog();
         loadTasks(currentTaskPeriod);
+        // Обновляем "Мои задачи в работе"
+        if (typeof loadMyInProgressTasks === 'function') {
+            loadMyInProgressTasks();
+        }
         return;
     }
     
@@ -948,6 +960,10 @@ async function submitSelectedTools(orderId, scheduleId) {
             alert('✅ Инструменты сохранены');
             closeDialog();
             loadTasks(currentTaskPeriod);
+            // Обновляем "Мои задачи в работе"
+            if (typeof loadMyInProgressTasks === 'function') {
+                loadMyInProgressTasks();
+            }
         } else {
             alert('Ошибка: ' + (data.message || 'Неизвестная'));
         }
@@ -964,7 +980,10 @@ async function flagNoDrawing(scheduleId) {
         formData.append('schedule_id', scheduleId);
         const resp = await fetch('/mobile/api/flag_no_drawing', { method: 'POST', body: formData });
         const data = await resp.json();
-        if (data.success) { loadTasks(currentTaskPeriod); }
+        if (data.success) { 
+            loadTasks(currentTaskPeriod); 
+            if (typeof loadMyInProgressTasks === 'function') loadMyInProgressTasks();
+        }
         else { alert('Ошибка: ' + (data.message || '')); }
     } catch (e) { alert('Ошибка: ' + e.message); }
 }
@@ -975,7 +994,10 @@ async function flagNoNcProgram(scheduleId) {
         formData.append('schedule_id', scheduleId);
         const resp = await fetch('/mobile/api/flag_no_nc_program', { method: 'POST', body: formData });
         const data = await resp.json();
-        if (data.success) { loadTasks(currentTaskPeriod); }
+        if (data.success) { 
+            loadTasks(currentTaskPeriod); 
+            if (typeof loadMyInProgressTasks === 'function') loadMyInProgressTasks();
+        }
         else { alert('Ошибка: ' + (data.message || '')); }
     } catch (e) { alert('Ошибка: ' + e.message); }
 }
@@ -992,6 +1014,7 @@ async function sendToOtk(scheduleId) {
         if (data.success) {
             alert('Деталь отправлена на ОТК');
             loadTasks(currentTaskPeriod);
+            if (typeof loadMyInProgressTasks === 'function') loadMyInProgressTasks();
         } else {
             alert('Ошибка: ' + (data.message || 'Неизвестная'));
         }
