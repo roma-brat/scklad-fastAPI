@@ -1001,6 +1001,186 @@ async def api_send_to_otk(request: Request, schedule_id: int = Form(...)):
 
 
 # ============================================================
+# MY IN PROGRESS TASKS — задачи в работе пользователя
+# ============================================================
+
+
+@router.get("/api/my-in-progress-tasks")
+async def api_my_in_progress_tasks(request: Request):
+    """Получить задачи пользователя в работе (in_progress)"""
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("api_my_in_progress_tasks called")
+
+    user = get_user(request)
+    if not user:
+        logger.warning("User not authenticated")
+        return JSONResponse(
+            status_code=401, content={"success": False, "message": "Unauthorized"}
+        )
+
+    # Только пользователи с ролью "user"
+    if user.get("role") != "user":
+        return JSONResponse(
+            status_code=403, content={"success": False, "message": "Access denied"}
+        )
+
+    logger.info(
+        f"User: {user.get('username')}, workstations: {user.get('workstations')}"
+    )
+
+    db = get_db()
+    try:
+        # Собираем workstation'ы
+        raw_workstations = []
+        if user.get("workstation"):
+            raw_workstations.append(user["workstation"])
+        if user.get("workstations"):
+            ws = user["workstations"]
+            if isinstance(ws, str):
+                try:
+                    parsed = json.loads(ws)
+                    if isinstance(parsed, list):
+                        raw_workstations.extend(parsed)
+                    elif isinstance(parsed, str):
+                        raw_workstations.append(parsed)
+                except:
+                    try:
+                        decoded = bytes(ws, "utf-8").decode("unicode_escape")
+                        parsed = json.loads(decoded)
+                        if isinstance(parsed, list):
+                            raw_workstations.extend(parsed)
+                        elif isinstance(parsed, str):
+                            raw_workstations.append(parsed)
+                    except:
+                        raw_workstations.extend(
+                            [w.strip() for w in ws.split(",") if w.strip()]
+                        )
+            elif isinstance(ws, list):
+                raw_workstations.extend(ws)
+
+        # Получаем все оборудование
+        equipment = db.get_all_equipment()
+        equipment_by_id = {eq.get("id"): eq for eq in equipment if eq.get("id")}
+        equipment_by_name = {
+            eq.get("name", "").lower(): eq.get("id")
+            for eq in equipment
+            if eq.get("name")
+        }
+
+        # Fuzzy matching工作站
+        user_equipment_ids = []
+        for ws in raw_workstations:
+            if not ws:
+                continue
+            try:
+                eq_id = int(ws)
+                if eq_id in equipment_by_id and eq_id not in user_equipment_ids:
+                    user_equipment_ids.append(eq_id)
+                    continue
+            except (ValueError, TypeError):
+                pass
+            ws_lower = str(ws).lower().strip()
+            ws_clean = "".join(c for c in ws_lower if c.isalnum() or c.isspace())
+            for eq_name, eq_id in equipment_by_name.items():
+                eq_clean = "".join(c for c in eq_name if c.isalnum() or c.isspace())
+                if ws_clean in eq_clean or eq_clean in eq_clean or ws_lower in eq_name:
+                    if eq_id not in user_equipment_ids:
+                        user_equipment_ids.append(eq_id)
+
+        logger.info(f"User raw workstations: {repr(raw_workstations)}")
+        logger.info(f"Matched Equipment IDs: {user_equipment_ids}")
+
+        if not user_equipment_ids:
+            return JSONResponse(
+                content={
+                    "success": True,
+                    "tasks": [],
+                    "debug": {
+                        "raw_workstations": raw_workstations,
+                        "matched_equipment_ids": [],
+                    },
+                }
+            )
+
+        all_tasks = []
+
+        # Получаем задачи для всех станков пользователя (без фильтра по дате)
+        for eq_id in user_equipment_ids:
+            try:
+                # Получаем ВСЕ расписание для станка (без фильтра по дате)
+                schedule = db.get_production_schedule(equipment_id=eq_id)
+
+                for task in schedule:
+                    # Показываем ТОЛЬКО in_progress (не planned!)
+                    if task.get("status") != "in_progress":
+                        continue
+
+                    # ФИЛЬТР: показываем только задачи, которые ЭТОТ пользователь взял
+                    task_taken_by = task.get("taken_by")
+                    current_username = user.get("username")
+                    if task_taken_by and task_taken_by != current_username:
+                        # Если задачу взял другой пользователь - пропускаем
+                        continue
+
+                    # Сериализуем datetime в строки для JSON
+                    task_copy = {}
+                    for k, v in task.items():
+                        if isinstance(v, datetime):
+                            task_copy[k] = v.isoformat()
+                        else:
+                            task_copy[k] = v
+
+                    task = task_copy
+
+                    # Добавляем события
+                    task_id = task.get("id")
+                    events = db.get_schedule_events(task_id) if task_id else []
+                    task["events"] = [e["event_type"] for e in events]
+                    task["has_no_drawing"] = "no_drawing" in task["events"]
+                    task["has_no_nc_program"] = "no_nc_program" in task["events"]
+                    task["has_first_piece_checked"] = (
+                        "first_piece_checked" in task["events"]
+                    )
+                    task["has_otk_pending"] = "otk_pending" in task["events"]
+                    task["has_otk_approved"] = "otk_approved" in task["events"]
+                    task["has_otk_rejected"] = "otk_rejected" in task["events"]
+
+                    # Добавляем инструменты из route_card_data заказа
+                    order_id = task.get("order_id")
+                    if order_id:
+                        order_tools = db.get_order_tools(order_id)
+                        task["tools"] = order_tools
+                        logger.info(f"Task {task_id}: loaded {len(order_tools)} tools from order {order_id}")
+
+                    all_tasks.append(task)
+            except Exception as e:
+                logger.error(f"Error loading schedule for eq {eq_id}: {e}")
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "tasks": all_tasks,
+                "debug": {
+                    "raw_workstations": raw_workstations,
+                    "user_equipment_ids": user_equipment_ids,
+                    "task_count": len(all_tasks),
+                },
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error in api_my_in_progress_tasks: {e}")
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": str(e),
+            },
+            status_code=500,
+        )
+
+
+# ============================================================
 # QR SCANNER — страница сканера
 # ============================================================
 
