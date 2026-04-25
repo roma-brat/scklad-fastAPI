@@ -3,6 +3,7 @@
 """
 
 import os
+import logging
 from datetime import datetime
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends, Form
@@ -18,6 +19,15 @@ from database import DatabaseManager
 from services.auth_service import AuthService
 from utils.user_agent import is_mobile as _is_mobile
 
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-8s | %(message)s",
+    datefmt="%H:%M:%S"
+)
+logger = logging.getLogger(__name__)
+
+
 # ========== GLOBAL STATE ==========
 db_manager: DatabaseManager = None
 
@@ -27,8 +37,9 @@ async def lifespan(app: FastAPI):
     global db_manager
     db_manager = DatabaseManager(DATABASE_URL)
     print("✅ Database initialized")
+    logger.info("Application startup complete")
     yield
-    print("👋 Shutting down")
+    logger.info("Shutting down")
 
 
 app = FastAPI(title="Склад Инструментов", version="2.0.0", lifespan=lifespan)
@@ -41,6 +52,29 @@ app.add_middleware(
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
+
+
+# ========== HTTP LOGGING MIDDLEWARE ==========
+
+class HTTPLoggingMiddleware(BaseHTTPMiddleware):
+    """Middleware для логирования HTTP запросов."""
+
+    async def dispatch(self, request: Request, call_next):
+        # Логируем запрос
+        logger.info(f"{request.method} {request.url.path}")
+
+        response = await call_next(request)
+
+        # Логируем ответ (только ошибки или важные операции)
+        if response.status_code >= 400:
+            logger.warning(f"  → {response.status_code} {request.url.path}")
+        elif request.method in ["POST", "PUT", "DELETE"]:
+            logger.info(f"  → {response.status_code}")
+
+        return response
+
+
+app.add_middleware(HTTPLoggingMiddleware)
 
 
 # ========== MOBILE DETECTION MIDDLEWARE ==========

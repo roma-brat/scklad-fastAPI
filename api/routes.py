@@ -345,6 +345,7 @@ async def view_route(request: Request, route_id: int):
     db = get_db()
     try:
         route = db.get_route_by_id(route_id)
+        logger.info(f"Route {route_id} pdf_file: {route.get('pdf_file') if route else 'NOT FOUND'}")
 
         if not route:
             return RedirectResponse(url="/routes", status_code=303)
@@ -1003,10 +1004,22 @@ async def get_route_pdf(request: Request, route_id: int):
         if not os.path.exists(file_path):
             return JSONResponse({"error": "Файл не найден на сервере"}, status_code=404)
 
-        return FileResponse(
-            file_path,
+        # Отдаем PDF для просмотра в браузере (inline), не скачивания
+        from fastapi.responses import StreamingResponse
+        import io
+
+        with open(file_path, 'rb') as f:
+            file_content = f.read()
+
+        return StreamingResponse(
+            io.BytesIO(file_content),
             media_type="application/pdf",
-            filename=f"route_{route_id}.pdf"
+            headers={
+                "Content-Disposition": f'inline; filename="route_{route_id}.pdf"',
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            }
         )
 
     except Exception as e:

@@ -3365,7 +3365,7 @@ class DatabaseManager:
                        dr.lot_size, dr.volume, dr.calculated_mass, dr.blank_cost,
                        dr.manual_mass_input, dr.material_cost, dr.unit_cost, dr.labor_cost,
                        dr.depreciation_cost, dr.utility_cost, dr.dimensions, dr.preprocessing_dimensions,
-                       dr.approved, dr.created_by, dr.pdf_path, dr.material_instance_id,
+                       dr.approved, dr.created_by, dr.pdf_path, dr.pdf_file, dr.material_instance_id,
                        mi.mark_name, mi.sortament_name
                 FROM detail_routes dr
                 LEFT JOIN material_instances mi ON dr.material_instance_id = mi.id
@@ -3431,6 +3431,8 @@ class DatabaseManager:
                 "dimensions",
                 "preprocessing_dimensions",
                 "status",
+                "pdf_file",
+                "pdf_path",
             }
             updates = {k: v for k, v in kwargs.items() if k in allowed_fields}
             if not updates:
