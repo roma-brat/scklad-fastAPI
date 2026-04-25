@@ -47,6 +47,33 @@
             </div>
         </div>
 
+        <!-- Прикрепленный файл (PDF) -->
+        <div class="bg-white rounded-lg shadow border border-gray-200 p-6">
+            <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                <i class="fas fa-file-pdf mr-2 text-red-600"></i>Прикрепленный файл (PDF)
+            </h2>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Загрузить PDF файл чертежа</label>
+                    <input type="file" name="pdf_file" accept=".pdf"
+                           class="w-full px-4 py-2 border border-gray-200 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100"
+                           id="pdf-upload">
+                    <p class="text-xs text-gray-500 mt-1">Максимальный размер: 10MB. Разрешены только PDF файлы.</p>
+                </div>
+                <div id="pdf-preview" class="hidden">
+                    <div class="flex items-center justify-between bg-red-50 rounded-lg p-3">
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-file-pdf text-red-600"></i>
+                            <span class="text-sm text-gray-700" id="pdf-filename"></span>
+                        </div>
+                        <button type="button" onclick="removePdf()" class="text-red-600 hover:text-red-800">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Материал (каскадные dropdown) -->
         <div class="bg-white rounded-lg shadow border border-gray-200 p-6">
             <div class="flex items-center justify-between mb-4">
@@ -1188,6 +1215,11 @@ async function saveRoute() {
     formData.append('designation', designation);
     formData.append('version', document.getElementById('version').value);
     formData.append('material_instance_id', document.getElementById('material-instance-id').value);
+
+    // Прикрепленный PDF файл
+    if (selectedPdfFile) {
+        formData.append('pdf_file', selectedPdfFile);
+    }
     
     // Получаем quantity - пробуем оба варианта
     const quantityEl = document.getElementById('quantity') || document.getElementById('quantity-sheet');
@@ -1245,6 +1277,57 @@ async function saveRoute() {
         }
     } catch (e) {
         alert('Ошибка сети: ' + e.message);
+    }
+}
+
+// Обработка загрузки PDF
+let selectedPdfFile = null;
+
+document.getElementById('pdf-upload')?.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+        alert('Разрешены только PDF файлы!');
+        this.value = '';
+        return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+        alert('Максимальный размер файла: 10MB!');
+        this.value = '';
+        return;
+    }
+
+    selectedPdfFile = file;
+    document.getElementById('pdf-filename').textContent = file.name;
+    document.getElementById('pdf-preview').classList.remove('hidden');
+});
+
+function removePdf() {
+    selectedPdfFile = null;
+    document.getElementById('pdf-upload').value = '';
+    document.getElementById('pdf-preview').classList.add('hidden');
+}
+
+// Функция для загрузки PDF после создания маршрута
+async function uploadPdfAfterRouteCreate(routeId) {
+    if (!selectedPdfFile) return;
+
+    const formData = new FormData();
+    formData.append('file', selectedPdfFile);
+
+    try {
+        const response = await fetch(`/routes/${routeId}/pdf/upload`, {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+        if (!data.success) {
+            console.error('Ошибка загрузки PDF:', data.error);
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки PDF:', error);
     }
 }
 
